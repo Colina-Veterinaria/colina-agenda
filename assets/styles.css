@@ -827,6 +827,13 @@ button {
   box-shadow: 0 18px 32px rgba(184, 137, 51, 0.3);
 }
 
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+  transform: none;
+  box-shadow: none;
+}
+
 .feedback {
   margin-top: 16px;
   padding: 14px 16px;

@@ -24,6 +24,15 @@
     qs('footerUpdated').textContent = `Atualizado às ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
   }
 
+  function setTableMessage(message) {
+    qs('agendaTableBody').innerHTML = `
+      <tr class="row-empty row-hour-break">
+        <td class="cell-time">--:--</td>
+        <td colspan="7" class="slot-message">${message}</td>
+      </tr>
+    `;
+  }
+
   function renderDayNav() {
     const container = qs('dayPills');
     container.innerHTML = '';
@@ -47,14 +56,11 @@
 
   function renderSummary() {
     const summary = api.getDaySummary(selectedDateKey);
-    const activeSummary = qs('agendaSummary');
-
     qs('turnoManha').classList.toggle('is-active', selectedShift === 'manha');
     qs('turnoTarde').classList.toggle('is-active', selectedShift === 'tarde');
     qs('countManha').textContent = `${summary.morningCount} agendado${summary.morningCount === 1 ? '' : 's'}`;
     qs('countTarde').textContent = `${summary.afternoonCount} agendado${summary.afternoonCount === 1 ? '' : 's'}`;
-
-    activeSummary.innerHTML = `
+    qs('agendaSummary').innerHTML = `
       <div class="summary-chip">
         <span class="summary-chip-value">${summary.total}</span>
         <span class="summary-chip-label">no dia</span>
@@ -111,6 +117,11 @@
     const rows = buildRows();
     const tbody = qs('agendaTableBody');
 
+    if (!rows.length) {
+      setTableMessage('Nenhum agendamento encontrado para este turno.');
+      return;
+    }
+
     tbody.innerHTML = rows
       .map((row) => {
         if (row.type === 'empty') {
@@ -137,12 +148,8 @@
               <span>${appointment.breed}</span>
             </td>
             <td>${appointment.breed}</td>
-            <td>
-              <span class="bool-pill ${appointment.bath ? 'is-yes' : 'is-no'}">${appointment.bath ? 'Sim' : 'Não'}</span>
-            </td>
-            <td>
-              <span class="service-pill ${groomingLabel ? '' : 'is-empty'}">${groomingLabel || 'Sem tosa'}</span>
-            </td>
+            <td><span class="bool-pill ${appointment.bath ? 'is-yes' : 'is-no'}">${appointment.bath ? 'Sim' : 'Não'}</span></td>
+            <td><span class="service-pill ${groomingLabel ? '' : 'is-empty'}">${groomingLabel || 'Sem tosa'}</span></td>
             <td class="cell-note">${appointment.notes || 'Sem observações.'}</td>
           </tr>
         `;
@@ -170,6 +177,28 @@
     renderSummary();
     renderTable();
     renderFooter();
+  }
+
+  function renderError(error) {
+    renderDayNav();
+    qs('agendaTitle').textContent = 'Agenda indisponível';
+    qs('agendaShiftBadge').textContent = 'Sem conexão';
+    qs('agendaSummary').innerHTML = `
+      <div class="summary-chip">
+        <span class="summary-chip-value">!</span>
+        <span class="summary-chip-label">falha ao carregar</span>
+      </div>
+    `;
+    setTableMessage(error && error.message ? error.message : 'Não foi possível carregar os dados do Supabase.');
+    qs('agendaFooter').innerHTML = '<span>Confira as policies do Supabase e a conectividade da página.</span>';
+  }
+
+  async function syncData() {
+    try {
+      await api.refreshAppointments();
+    } catch (error) {
+      renderError(error);
+    }
   }
 
   function bind() {
@@ -200,8 +229,21 @@
     window.addEventListener('colina:appointments-changed', render);
   }
 
-  bind();
-  updateClock();
-  render();
-  window.setInterval(updateClock, 30000);
+  async function init() {
+    bind();
+    updateClock();
+    setTableMessage('Carregando agenda...');
+
+    try {
+      await api.ready();
+      render();
+    } catch (error) {
+      renderError(error);
+    }
+
+    window.setInterval(updateClock, 30000);
+    window.setInterval(syncData, 30000);
+  }
+
+  init();
 })();

@@ -1,9 +1,14 @@
 (function () {
   const api = window.ColinaAgenda;
   let selectedDateKey = api.toDateKey(new Date());
+  let submitting = false;
 
   function qs(id) {
     return document.getElementById(id);
+  }
+
+  function submitButton() {
+    return document.querySelector('.primary-button');
   }
 
   function updateClock() {
@@ -64,15 +69,6 @@
     `;
   }
 
-  function renderTodayGroups() {
-    const appointments = api.getAppointmentsByDate(selectedDateKey);
-    const morning = appointments.filter((appointment) => api.getShiftForTime(appointment.arrivalTime) === 'manha');
-    const afternoon = appointments.filter((appointment) => api.getShiftForTime(appointment.arrivalTime) === 'tarde');
-
-    qs('appointmentsTitle').textContent = `Agendamentos de ${api.formatLongDate(selectedDateKey)}`;
-    qs('todayGroups').innerHTML = [renderGroup('Manhã', morning), renderGroup('Tarde', afternoon)].join('');
-  }
-
   function renderGroup(label, appointments) {
     return `
       <section class="day-group">
@@ -102,6 +98,15 @@
     `;
   }
 
+  function renderTodayGroups() {
+    const appointments = api.getAppointmentsByDate(selectedDateKey);
+    const morning = appointments.filter((appointment) => api.getShiftForTime(appointment.arrivalTime) === 'manha');
+    const afternoon = appointments.filter((appointment) => api.getShiftForTime(appointment.arrivalTime) === 'tarde');
+
+    qs('appointmentsTitle').textContent = `Agendamentos de ${api.formatLongDate(selectedDateKey)}`;
+    qs('todayGroups').innerHTML = [renderGroup('Manhã', morning), renderGroup('Tarde', afternoon)].join('');
+  }
+
   function renderMonthlyInsights() {
     const monthCounts = api.getMonthlyGroomingCounts(api.monthKey(selectedDateKey));
     const serviceList = [
@@ -114,7 +119,7 @@
     qs('servicesMonthNote').textContent = `Resumo de ${api.formatMonthYear(selectedDateKey)} com foco nas três opções de tosa.`;
     qs('serviceRankList').innerHTML = serviceList
       .map((service, index) => {
-        const width = Math.max(10, Math.round((service.count / max) * 100));
+        const width = service.count ? Math.round((service.count / max) * 100) : 10;
         return `
           <div class="service-rank">
             <div class="service-rank-index">${index + 1}</div>
@@ -133,23 +138,25 @@
 
   function renderFrequentPets() {
     const items = api.getFrequentPets(5);
-    qs('frequentList').innerHTML = items
-      .map((item) => {
-        return `
-          <div class="frequent-item">
-            <div class="frequent-avatar">${item.emoji}</div>
-            <div class="frequent-copy">
-              <strong>${item.petName}</strong>
-              <span>${item.clientName}</span>
-            </div>
-            <div class="frequent-count">
-              <strong>${item.visits}</strong>
-              visitas
-            </div>
-          </div>
-        `;
-      })
-      .join('');
+    qs('frequentList').innerHTML = items.length
+      ? items
+          .map((item) => {
+            return `
+              <div class="frequent-item">
+                <div class="frequent-avatar">${item.emoji}</div>
+                <div class="frequent-copy">
+                  <strong>${item.petName}</strong>
+                  <span>${item.clientName}</span>
+                </div>
+                <div class="frequent-count">
+                  <strong>${item.visits}</strong>
+                  visitas
+                </div>
+              </div>
+            `;
+          })
+          .join('')
+      : '<div class="empty-card">Os pets frequentes aparecerão conforme novos atendimentos forem salvos.</div>';
   }
 
   function updateHelperHints() {
@@ -183,8 +190,23 @@
     feedback.textContent = '';
   }
 
-  function handleSubmit(event) {
+  function setSubmitting(nextValue) {
+    submitting = nextValue;
+    const button = submitButton();
+    if (!button) {
+      return;
+    }
+
+    button.disabled = nextValue;
+      button.textContent = nextValue ? 'Salvando...' : 'Salvar agendamento';
+  }
+
+  async function handleSubmit(event) {
     event.preventDefault();
+    if (submitting) {
+      return;
+    }
+
     clearFeedback();
 
     const payload = {
@@ -214,15 +236,48 @@
       return;
     }
 
-    const saved = api.addAppointment(payload);
-    selectedDateKey = saved.date;
-    qs('appointmentForm').reset();
-    qs('appointmentDate').value = selectedDateKey;
-    qs('arrivalTime').value = '08:00';
-    qs('bath').checked = true;
-    updateHelperHints();
-    render();
-    showFeedback(`Agendamento salvo para ${saved.petName} às ${saved.arrivalTime}.`, 'success');
+    setSubmitting(true);
+
+    try {
+      const saved = await api.addAppointment(payload);
+      selectedDateKey = saved.date;
+      qs('appointmentForm').reset();
+      qs('appointmentDate').value = selectedDateKey;
+      qs('arrivalTime').value = '08:00';
+      qs('bath').checked = true;
+      updateHelperHints();
+      render();
+      showFeedback(`Agendamento salvo para ${saved.petName} às ${saved.arrivalTime}.`, 'success');
+    } catch (error) {
+      showFeedback(error && error.message ? error.message : 'Não foi possível salvar o agendamento.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function render() {
+    renderDayNav();
+    renderSummary();
+    renderTodayGroups();
+    renderMonthlyInsights();
+    renderFrequentPets();
+  }
+
+  function renderError(error) {
+    renderDayNav();
+    qs('appointmentsTitle').textContent = 'Agenda indisponível';
+    qs('todayGroups').innerHTML = '<div class="empty-card">Não foi possível carregar os agendamentos do Supabase.</div>';
+    qs('serviceRankList').innerHTML = '';
+    qs('frequentList').innerHTML = '<div class="empty-card">As métricas voltarão assim que a conexão for restabelecida.</div>';
+    showFeedback(error && error.message ? error.message : 'Falha ao carregar dados do Supabase.', 'error');
+  }
+
+  async function syncData() {
+    try {
+      await api.refreshAppointments();
+    } catch (error) {
+      renderError(error);
+    }
   }
 
   function bind() {
@@ -243,14 +298,12 @@
     });
 
     qs('appointmentForm').addEventListener('submit', handleSubmit);
+
     ['appointmentDate', 'arrivalTime', 'bath', 'groomingType'].forEach((id) => {
       qs(id).addEventListener('input', function () {
         if (id === 'appointmentDate' && qs('appointmentDate').value) {
           selectedDateKey = qs('appointmentDate').value;
-          renderDayNav();
-          renderSummary();
-          renderTodayGroups();
-          renderMonthlyInsights();
+          render();
         }
         updateHelperHints();
       });
@@ -259,25 +312,27 @@
     ['phone', 'clientName', 'petName', 'breed', 'notes'].forEach((id) => {
       qs(id).addEventListener('input', clearFeedback);
     });
+
+    window.addEventListener('colina:appointments-changed', render);
   }
 
-  function render() {
-    renderDayNav();
-    renderSummary();
-    renderTodayGroups();
-    renderMonthlyInsights();
-    renderFrequentPets();
-  }
-
-  function init() {
+  async function init() {
     qs('appointmentDate').value = selectedDateKey;
     qs('arrivalTime').value = '08:00';
     qs('bath').checked = true;
     updateHelperHints();
     updateClock();
     bind();
-    render();
+
+    try {
+      await api.ready();
+      render();
+    } catch (error) {
+      renderError(error);
+    }
+
     window.setInterval(updateClock, 30000);
+    window.setInterval(syncData, 30000);
   }
 
   init();

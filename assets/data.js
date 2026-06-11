@@ -1,5 +1,6 @@
 (function () {
-  const STORAGE_KEY = 'colina-vet-agenda-v2';
+  const SUPABASE_URL = 'https://urgcgdwwyhtyegfpuxyq.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ1cmdjZ2R3d3lodHllZ2ZwdXh5cSIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzgxMTg3MjE0LCJleHAiOjIwOTY3NjMyMTR9.XUz0C0ZNSlS_cvakYT2_q2pJPLKK8qBLZy5a6wQ5kd4';
   const GROOMING_TYPES = {
     higienica: 'Tosa Higiênica',
     tesoura: 'Tosa Tesoura',
@@ -14,6 +15,13 @@
   const WEEKDAYS_LONG = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
   const MONTHS_LONG = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
   const PET_EMOJIS = ['🐶', '🐱', '🐾', '🐶', '🐱'];
+
+  const state = {
+    appointments: [],
+    initialized: false,
+    loading: false,
+    lastError: null,
+  };
 
   function startOfDay(date) {
     const value = new Date(date);
@@ -105,93 +113,106 @@
     );
   }
 
-  function safeStorage() {
-    try {
-      return window.localStorage;
-    } catch (error) {
-      return null;
-    }
-  }
-
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
   }
 
-  function seedState() {
-    const today = startOfDay(new Date());
-    const at = (days) => toDateKey(offsetDate(today, days));
+  function emitChange(detail) {
+    window.dispatchEvent(new CustomEvent('colina:appointments-changed', { detail }));
+  }
 
+  function buildUrl(table, searchParams) {
+    const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
+
+    Object.entries(searchParams || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        url.searchParams.set(key, value);
+      }
+    });
+
+    return url;
+  }
+
+  async function requestJson(url, options) {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        ...(options && options.headers ? options.headers : {}),
+      },
+    });
+
+    const text = await response.text();
+    const payload = text ? JSON.parse(text) : null;
+
+    if (!response.ok) {
+      const error = new Error(payload && payload.message ? payload.message : 'Erro ao acessar o Supabase.');
+      error.code = payload && payload.code ? payload.code : String(response.status);
+      error.details = payload;
+      throw error;
+    }
+
+    return payload;
+  }
+
+  function normalizeAppointment(row) {
     return {
-      appointments: [
-        { id: 'seed-1', date: at(-3), arrivalTime: '08:00', phone: '(47) 99112-1300', clientName: 'Carlos Mendes', petName: 'Thor', breed: 'Labrador', bath: true, groomingType: 'tesoura', notes: 'Pele sensível. Usar perfume suave.' },
-        { id: 'seed-2', date: at(-3), arrivalTime: '09:10', phone: '(47) 99641-3201', clientName: 'Ana Paula Souza', petName: 'Mel', breed: 'Persa', bath: true, groomingType: 'higienica', notes: 'Cortar somente a região das patas.' },
-        { id: 'seed-3', date: at(-3), arrivalTime: '10:40', phone: '(47) 99988-9014', clientName: 'Roberto Alves', petName: 'Pipoca', breed: 'Shih-tzu', bath: true, groomingType: '', notes: 'Banho avulso com hidratação.' },
-        { id: 'seed-4', date: at(-3), arrivalTime: '13:30', phone: '(47) 99273-6142', clientName: 'Juliana Torres', petName: 'Nuvem', breed: 'Lhasa Apso', bath: true, groomingType: 'maquina', notes: 'Evitar máquina muito curta no dorso.' },
-
-        { id: 'seed-5', date: at(-2), arrivalTime: '08:20', phone: '(47) 99112-1300', clientName: 'Carlos Mendes', petName: 'Thor', breed: 'Labrador', bath: true, groomingType: 'higienica', notes: 'Chega de coleira vermelha.' },
-        { id: 'seed-6', date: at(-2), arrivalTime: '09:15', phone: '(47) 99755-4832', clientName: 'Fernanda Lima', petName: 'Bolinha', breed: 'Poodle', bath: true, groomingType: 'tesoura', notes: 'Manter topete arredondado.' },
-        { id: 'seed-7', date: at(-2), arrivalTime: '14:00', phone: '(47) 99641-3201', clientName: 'Ana Paula Souza', petName: 'Mel', breed: 'Persa', bath: true, groomingType: 'maquina', notes: 'Secagem mais delicada no peito.' },
-        { id: 'seed-8', date: at(-2), arrivalTime: '15:10', phone: '(47) 99445-8103', clientName: 'Sandra Reis', petName: 'Max', breed: 'Golden Retriever', bath: true, groomingType: 'tesoura', notes: '' },
-
-        { id: 'seed-9', date: at(-1), arrivalTime: '08:00', phone: '(47) 99641-3201', clientName: 'Ana Paula Souza', petName: 'Mel', breed: 'Persa', bath: true, groomingType: 'higienica', notes: '' },
-        { id: 'seed-10', date: at(-1), arrivalTime: '09:40', phone: '(47) 99112-1300', clientName: 'Carlos Mendes', petName: 'Thor', breed: 'Labrador', bath: true, groomingType: 'tesoura', notes: 'Cliente pediu foto antes da saída.' },
-        { id: 'seed-11', date: at(-1), arrivalTime: '10:20', phone: '(47) 99988-9014', clientName: 'Roberto Alves', petName: 'Pipoca', breed: 'Shih-tzu', bath: true, groomingType: 'maquina', notes: '' },
-        { id: 'seed-12', date: at(-1), arrivalTime: '13:00', phone: '(47) 99755-4832', clientName: 'Fernanda Lima', petName: 'Bolinha', breed: 'Poodle', bath: true, groomingType: '', notes: 'Somente banho e escovação.' },
-        { id: 'seed-13', date: at(-1), arrivalTime: '15:30', phone: '(47) 99273-6142', clientName: 'Juliana Torres', petName: 'Nuvem', breed: 'Lhasa Apso', bath: true, groomingType: 'tesoura', notes: '' },
-
-        { id: 'seed-14', date: at(0), arrivalTime: '08:00', phone: '(47) 99112-1300', clientName: 'Carlos Mendes', petName: 'Thor', breed: 'Labrador', bath: true, groomingType: 'tesoura', notes: 'Retirar às 11h30.' },
-        { id: 'seed-15', date: at(0), arrivalTime: '08:45', phone: '(47) 99641-3201', clientName: 'Ana Paula Souza', petName: 'Mel', breed: 'Persa', bath: true, groomingType: 'higienica', notes: 'Usar laço rosa.' },
-        { id: 'seed-16', date: at(0), arrivalTime: '09:30', phone: '(47) 99988-9014', clientName: 'Roberto Alves', petName: 'Pipoca', breed: 'Shih-tzu', bath: true, groomingType: 'maquina', notes: '' },
-        { id: 'seed-17', date: at(0), arrivalTime: '10:30', phone: '(47) 99755-4832', clientName: 'Fernanda Lima', petName: 'Bolinha', breed: 'Poodle', bath: true, groomingType: '', notes: 'Cliente chega um pouco mais cedo.' },
-        { id: 'seed-18', date: at(0), arrivalTime: '13:00', phone: '(47) 99273-6142', clientName: 'Juliana Torres', petName: 'Nuvem', breed: 'Lhasa Apso', bath: true, groomingType: 'tesoura', notes: '' },
-        { id: 'seed-19', date: at(0), arrivalTime: '14:15', phone: '(47) 99445-8103', clientName: 'Sandra Reis', petName: 'Max', breed: 'Golden Retriever', bath: true, groomingType: 'higienica', notes: 'Escovação caprichada na cauda.' },
-        { id: 'seed-20', date: at(0), arrivalTime: '15:00', phone: '(47) 99380-6110', clientName: 'Paula Azevedo', petName: 'Lola', breed: 'Spitz Alemão', bath: true, groomingType: 'maquina', notes: 'Cliente pediu aviso por WhatsApp.' },
-        { id: 'seed-21', date: at(0), arrivalTime: '16:30', phone: '(47) 99210-3402', clientName: 'Marcelo Prado', petName: 'Chico', breed: 'Bulldog Francês', bath: true, groomingType: '', notes: '' },
-
-        { id: 'seed-22', date: at(1), arrivalTime: '08:30', phone: '(47) 99112-1300', clientName: 'Carlos Mendes', petName: 'Thor', breed: 'Labrador', bath: true, groomingType: 'tesoura', notes: '' },
-        { id: 'seed-23', date: at(1), arrivalTime: '09:30', phone: '(47) 99641-3201', clientName: 'Ana Paula Souza', petName: 'Mel', breed: 'Persa', bath: true, groomingType: 'higienica', notes: '' },
-        { id: 'seed-24', date: at(1), arrivalTime: '14:00', phone: '(47) 99830-2211', clientName: 'Marcos Costa', petName: 'Luna', breed: 'Maltês', bath: true, groomingType: 'maquina', notes: 'Primeira visita.' },
-
-        { id: 'seed-25', date: at(2), arrivalTime: '09:00', phone: '(47) 99755-4832', clientName: 'Fernanda Lima', petName: 'Bolinha', breed: 'Poodle', bath: true, groomingType: '', notes: '' },
-        { id: 'seed-26', date: at(2), arrivalTime: '10:00', phone: '(47) 99273-6142', clientName: 'Juliana Torres', petName: 'Nuvem', breed: 'Lhasa Apso', bath: true, groomingType: 'tesoura', notes: '' },
-        { id: 'seed-27', date: at(2), arrivalTime: '15:30', phone: '(47) 99988-9014', clientName: 'Roberto Alves', petName: 'Pipoca', breed: 'Shih-tzu', bath: true, groomingType: 'higienica', notes: '' },
-      ],
+      id: row.id,
+      date: row.appointment_date,
+      arrivalTime: String(row.arrival_time || '').slice(0, 5),
+      shift: row.shift,
+      phone: row.customer ? row.customer.phone : '',
+      clientName: row.customer ? row.customer.full_name : '',
+      petName: row.pet ? row.pet.name : '',
+      breed: row.pet ? row.pet.breed : '',
+      bath: Boolean(row.bath),
+      groomingType: row.grooming_type || '',
+      notes: row.notes || '',
+      status: row.status || 'scheduled',
     };
   }
 
-  function ensureState() {
-    const storage = safeStorage();
-    if (!storage) {
-      return seedState();
-    }
+  async function fetchAppointments() {
+    const url = buildUrl('grooming_appointments', {
+      select:
+        'id,appointment_date,arrival_time,shift,bath,grooming_type,notes,status,customer:customers!grooming_appointments_customer_id_fkey(full_name,phone),pet:pets!grooming_appointments_pet_id_fkey(name,breed)',
+      order: 'appointment_date.asc,arrival_time.asc',
+    });
 
-    try {
-      const raw = storage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.appointments)) {
-          return parsed;
-        }
-      }
-    } catch (error) {
-      storage.removeItem(STORAGE_KEY);
-    }
-
-    const seeded = seedState();
-    storage.setItem(STORAGE_KEY, JSON.stringify(seeded));
-    return seeded;
+    const data = await requestJson(url, { method: 'GET' });
+    return (data || []).map(normalizeAppointment).sort(compareAppointments);
   }
 
-  function saveState(state) {
-    const storage = safeStorage();
-    if (storage) {
-      storage.setItem(STORAGE_KEY, JSON.stringify(state));
+  async function refreshAppointments() {
+    state.loading = true;
+
+    try {
+      const appointments = await fetchAppointments();
+      state.appointments = appointments;
+      state.initialized = true;
+      state.lastError = null;
+      emitChange({ source: 'refresh', total: appointments.length });
+      return clone(appointments);
+    } catch (error) {
+      state.lastError = error;
+      throw error;
+    } finally {
+      state.loading = false;
     }
-    return state;
+  }
+
+  async function ready() {
+    if (state.initialized) {
+      return clone(state.appointments);
+    }
+
+    return refreshAppointments();
   }
 
   function getAppointments() {
-    return clone(ensureState().appointments).sort(compareAppointments);
+    return clone(state.appointments);
   }
 
   function getAppointmentsByDate(dateKey) {
@@ -225,12 +246,10 @@
       }
     });
 
-    const groomingTotal = groomingCounts.higienica + groomingCounts.tesoura + groomingCounts.maquina;
-
     return {
       total: appointments.length,
       bathCount,
-      groomingTotal,
+      groomingTotal: groomingCounts.higienica + groomingCounts.tesoura + groomingCounts.maquina,
       morningCount,
       afternoonCount,
       groomingCounts,
@@ -273,7 +292,7 @@
   }
 
   function hasConflict(nextAppointment) {
-    return getAppointments().some((appointment) => {
+    return state.appointments.some((appointment) => {
       return (
         appointment.date === nextAppointment.date &&
         appointment.arrivalTime === nextAppointment.arrivalTime &&
@@ -282,27 +301,111 @@
     });
   }
 
-  function addAppointment(input) {
-    const appointment = {
-      id: window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `manual-${Date.now()}`,
-      date: input.date,
-      arrivalTime: input.arrivalTime,
-      phone: input.phone.trim(),
-      clientName: input.clientName.trim(),
-      petName: input.petName.trim(),
-      breed: input.breed.trim(),
-      bath: Boolean(input.bath),
-      groomingType: input.groomingType || '',
-      notes: input.notes.trim(),
-      createdAt: new Date().toISOString(),
-    };
+  async function maybeSingle(table, params) {
+    const url = buildUrl(table, { ...params, limit: '1' });
+    const data = await requestJson(url, { method: 'GET' });
+    return Array.isArray(data) && data.length ? data[0] : null;
+  }
 
-    const nextState = ensureState();
-    nextState.appointments.push(appointment);
-    nextState.appointments.sort(compareAppointments);
-    saveState(nextState);
-    window.dispatchEvent(new CustomEvent('colina:appointments-changed', { detail: appointment }));
-    return appointment;
+  async function insertRows(table, rows) {
+    const url = buildUrl(table, { select: '*' });
+    return requestJson(url, {
+      method: 'POST',
+      headers: {
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify(rows),
+    });
+  }
+
+  async function updateRows(table, filters, values) {
+    const url = buildUrl(table, { ...filters, select: '*' });
+    return requestJson(url, {
+      method: 'PATCH',
+      headers: {
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify(values),
+    });
+  }
+
+  async function findOrCreateCustomer(input) {
+    const existing = await maybeSingle('customers', {
+      select: 'id,full_name,phone',
+      full_name: `eq.${input.clientName.trim()}`,
+      phone: `eq.${input.phone.trim()}`,
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    const created = await insertRows('customers', [
+      {
+        full_name: input.clientName.trim(),
+        phone: input.phone.trim(),
+      },
+    ]);
+
+    return created[0];
+  }
+
+  async function findOrCreatePet(customerId, input) {
+    const existing = await maybeSingle('pets', {
+      select: 'id,breed',
+      customer_id: `eq.${customerId}`,
+      name: `eq.${input.petName.trim()}`,
+    });
+
+    if (!existing) {
+      const created = await insertRows('pets', [
+        {
+          customer_id: customerId,
+          name: input.petName.trim(),
+          breed: input.breed.trim(),
+        },
+      ]);
+
+      return created[0];
+    }
+
+    if (existing.breed !== input.breed.trim()) {
+      const updated = await updateRows(
+        'pets',
+        { id: `eq.${existing.id}` },
+        { breed: input.breed.trim() }
+      );
+      return updated[0];
+    }
+
+    return existing;
+  }
+
+  async function addAppointment(input) {
+    await ready();
+
+    if (hasConflict(input)) {
+      throw new Error('Já existe um agendamento para este pet no mesmo dia e horário.');
+    }
+
+    const customer = await findOrCreateCustomer(input);
+    const pet = await findOrCreatePet(customer.id, input);
+
+    const created = await insertRows('grooming_appointments', [
+      {
+        customer_id: customer.id,
+        pet_id: pet.id,
+        appointment_date: input.date,
+        arrival_time: input.arrivalTime,
+        shift: getShiftForTime(input.arrivalTime),
+        bath: Boolean(input.bath),
+        grooming_type: input.groomingType || null,
+        notes: input.notes.trim(),
+      },
+    ]);
+
+    await refreshAppointments();
+    return state.appointments.find((appointment) => appointment.id === created[0].id);
   }
 
   function buildDayWindow(centerDateKey, radius) {
@@ -326,6 +429,17 @@
   }
 
   window.ColinaAgenda = {
+    ready,
+    refreshAppointments,
+    getAppointments,
+    getAppointmentsByDate,
+    getAppointmentsByDateAndShift,
+    getDaySummary,
+    getMonthlyGroomingCounts,
+    getFrequentPets,
+    hasConflict,
+    addAppointment,
+    buildDayWindow,
     toDateKey,
     fromDateKey,
     formatLongDate,
@@ -337,14 +451,11 @@
     getShiftLabel,
     getGroomingLabel,
     getServiceLabels,
-    getAppointments,
-    getAppointmentsByDate,
-    getAppointmentsByDateAndShift,
-    getDaySummary,
-    getMonthlyGroomingCounts,
-    getFrequentPets,
-    hasConflict,
-    addAppointment,
-    buildDayWindow,
+    isLoading: function () {
+      return state.loading;
+    },
+    getLastError: function () {
+      return state.lastError;
+    },
   };
 })();
