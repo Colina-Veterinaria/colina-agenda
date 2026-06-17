@@ -1,5 +1,6 @@
 (function () {
   const api = window.ColinaAgenda;
+  const e = api.escapeHtml;
   const todayKey = api.toDateKey(new Date());
   const currentMinutes = new Date().getHours() * 60 + new Date().getMinutes();
   let selectedDateKey = todayKey;
@@ -128,7 +129,7 @@
           return `
             <tr class="row-empty${row.hourBreak ? ' row-hour-break' : ''}">
               <td class="cell-time">${row.label}</td>
-              <td colspan="7" class="slot-message">Livre para encaixe neste horário.</td>
+              <td colspan="7" class="slot-message">livre</td>
             </tr>
           `;
         }
@@ -138,19 +139,17 @@
         return `
           <tr${row.hourBreak ? ' class="row-hour-break"' : ''}>
             <td class="cell-time">${appointment.arrivalTime}</td>
-            <td>${appointment.phone}</td>
+            <td>${e(appointment.phone)}</td>
             <td class="cell-client">
-              <strong>${appointment.clientName}</strong>
-              <span>Contato principal</span>
+              <strong>${e(appointment.clientName)}</strong>
             </td>
             <td class="cell-pet">
-              <strong>${appointment.petName}</strong>
-              <span>${appointment.breed}</span>
+              <strong>${e(appointment.petName)}</strong>
             </td>
-            <td>${appointment.breed}</td>
+            <td>${e(appointment.breed)}</td>
             <td><span class="bool-pill ${appointment.bath ? 'is-yes' : 'is-no'}">${appointment.bath ? 'Sim' : 'Não'}</span></td>
             <td><span class="service-pill ${groomingLabel ? '' : 'is-empty'}">${groomingLabel || 'Sem tosa'}</span></td>
-            <td class="cell-note">${appointment.notes || 'Sem observações.'}</td>
+            <td class="cell-note">${e(appointment.notes) || 'Sem observações.'}</td>
           </tr>
         `;
       })
@@ -168,7 +167,6 @@
       <span><strong>${appointments.length}</strong> agendamento${appointments.length === 1 ? '' : 's'} neste turno</span>
       <span><strong>${bathCount}</strong> com banho</span>
       <span><strong>${groomingCount}</strong> com tosa</span>
-      <span>Campos exibidos: Chegada, Tele, Cliente, Pet, Raça, Banho, Tosa e Observação</span>
     `;
   }
 
