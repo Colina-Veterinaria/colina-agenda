@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Colina Veterinária | Frequência</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body class="frequency-page">
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="34" height="34" viewBox="0 0 52 52" fill="none">
+            <circle cx="26" cy="26" r="25" fill="white" stroke="#C9A84C" stroke-width="2"></circle>
+            <circle cx="14" cy="22" r="5" fill="#F5E642"></circle>
+            <polyline points="4,38 16,16 28,38" fill="none" stroke="#7A4F2D" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></polyline>
+            <polyline points="20,38 32,22 44,38" fill="none" stroke="#7A4F2D" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+          </svg>
+        </div>
+        <div class="brand-copy">
+          <div class="brand-name">Colina</div>
+          <div class="brand-sub">Clínica Veterinária</div>
+        </div>
+      </div>
+
+      <nav class="screen-switch" aria-label="Navegação entre telas">
+        <a class="screen-link" href="template.html">Agenda da Parede</a>
+        <a class="screen-link" href="recepcao.html">Recepção</a>
+        <a class="screen-link" href="cadastros.html">Cadastros</a>
+        <a class="screen-link active" href="frequencia.html">Frequência</a>
+      </nav>
+
+      <div class="clock-card">
+        <div class="clock-time" id="clockTime">--:--</div>
+        <div class="clock-date" id="clockDate"></div>
+      </div>
+    </header>
+
+    <main class="page-main">
+      <section class="summary-strip panel">
+        <h1 class="section-title">Frequência &amp; reativação</h1>
+        <div class="reception-summary" id="activitySummary"></div>
+      </section>
+
+      <section class="form-panel panel">
+        <div class="panel-heading panel-heading-compact panel-heading-inline activity-toolbar">
+          <div class="segment-tabs" id="segmentTabs" aria-label="Filtro por segmento"></div>
+          <input type="search" id="activitySearch" placeholder="Buscar por cliente, pet ou telefone">
+        </div>
+
+        <div class="activity-list" id="activityList"></div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <div class="status-online">Conectado</div>
+      <div id="footerUpdated"></div>
+    </footer>
+  </div>
+
+  <script src="assets/data.js"></script>
+  <script src="assets/frequencia.js"></script>
+</body>
+</html>
