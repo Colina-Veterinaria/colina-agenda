@@ -38,6 +38,48 @@
     lastError: null,
   };
 
+  // Cache em sessionStorage para troca de tela instantânea (stale-while-revalidate):
+  // a página hidrata o estado na hora e revalida no Supabase em segundo plano.
+  // A versão protege contra formatos antigos quando o normalize mudar.
+  const CACHE_KEYS = {
+    appointments: 'colina:v1:appointments',
+    customers: 'colina:v1:customers',
+  };
+
+  function readCache(key) {
+    try {
+      const raw = sessionStorage.getItem(key);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return Array.isArray(parsed) ? parsed : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function writeCache(key, value) {
+    try {
+      sessionStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      // sessionStorage indisponível ou cheio: seguimos só com o estado em memória.
+    }
+  }
+
+  // Hidrata o estado a partir do cache já no carregamento, antes de qualquer
+  // render, para que getAppointments/getCustomers tenham dados de imediato.
+  (function hydrateFromCache() {
+    const cachedAppointments = readCache(CACHE_KEYS.appointments);
+    if (cachedAppointments) {
+      state.appointments = cachedAppointments;
+      state.appointmentsInitialized = true;
+    }
+
+    const cachedCustomers = readCache(CACHE_KEYS.customers);
+    if (cachedCustomers) {
+      state.customers = cachedCustomers;
+      state.registryInitialized = true;
+    }
+  })();
+
   function startOfDay(date) {
     const value = new Date(date);
     value.setHours(0, 0, 0, 0);
@@ -281,10 +323,14 @@
 
     try {
       const appointments = await fetchAppointments();
+      const changed = !state.appointmentsInitialized || JSON.stringify(appointments) !== JSON.stringify(state.appointments);
       state.appointments = appointments;
       state.appointmentsInitialized = true;
       state.lastError = null;
-      emitAppointmentsChange({ source: 'refresh', total: appointments.length });
+      writeCache(CACHE_KEYS.appointments, appointments);
+      if (changed) {
+        emitAppointmentsChange({ source: 'refresh', total: appointments.length });
+      }
       return clone(appointments);
     } catch (error) {
       state.lastError = error;
@@ -299,10 +345,14 @@
 
     try {
       const customers = await fetchCustomers();
+      const changed = !state.registryInitialized || JSON.stringify(customers) !== JSON.stringify(state.customers);
       state.customers = customers;
       state.registryInitialized = true;
       state.lastError = null;
-      emitRegistryChange({ source: 'refresh', total: customers.length });
+      writeCache(CACHE_KEYS.customers, customers);
+      if (changed) {
+        emitRegistryChange({ source: 'refresh', total: customers.length });
+      }
       return clone(customers);
     } catch (error) {
       state.lastError = error;
@@ -313,18 +363,32 @@
   }
 
   async function ready() {
+    // Espera de rede só quando não há dado nenhum (primeiro acesso da sessão).
+    // Com cache hidratado, revalidamos em segundo plano: a tela já renderizou
+    // e os eventos de mudança atualizam o conteúdo quando o fresco chega.
     const tasks = [];
+    const background = [];
 
     if (!state.appointmentsInitialized) {
       tasks.push(refreshAppointments());
+    } else {
+      background.push(refreshAppointments);
     }
 
     if (!state.registryInitialized) {
       tasks.push(refreshCustomers());
+    } else {
+      background.push(refreshCustomers);
     }
 
     if (tasks.length) {
       await Promise.all(tasks);
+    }
+
+    if (background.length) {
+      Promise.all(background.map((refresh) => refresh())).catch(() => {
+        // Mantemos os dados em cache; a revalidação tenta de novo na próxima troca.
+      });
     }
 
     return {
