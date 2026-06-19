@@ -42,10 +42,12 @@
   }
 
   function sortRows(rows) {
-    const byDaysDesc = (a, b) => (b.daysSince || -1) - (a.daysSince || -1) || a.fullName.localeCompare(b.fullName);
-
     if (activeFilter === 'novos') {
       return rows.sort((a, b) => a.fullName.localeCompare(b.fullName));
+    }
+
+    if (activeFilter === 'reativar') {
+      return rows.sort((a, b) => (b.daysSince || -1) - (a.daysSince || -1) || a.fullName.localeCompare(b.fullName));
     }
 
     if (activeFilter === 'ativos') {
@@ -53,14 +55,11 @@
         if (a.segment !== b.segment) {
           return a.segment === 'agendado' ? -1 : 1;
         }
-        if (a.segment === 'agendado') {
-          return (a.daysUntilNext || 0) - (b.daysUntilNext || 0);
-        }
-        return (a.daysSince || 0) - (b.daysSince || 0);
+        return b.visitCount - a.visitCount || a.fullName.localeCompare(b.fullName);
       });
     }
 
-    return rows.sort(byDaysDesc);
+    return rows.sort((a, b) => b.visitCount - a.visitCount || a.fullName.localeCompare(b.fullName));
   }
 
   function getRows() {
@@ -116,27 +115,21 @@
     }).join('');
   }
 
-  function lastVisitText(customer) {
+  function visitCountText(customer) {
+    if (customer.visitCount === 0) return 'Nunca veio';
+    return `${customer.visitCount} ${customer.visitCount === 1 ? 'visita' : 'visitas'}`;
+  }
+
+  function visitSubText(customer) {
     if (customer.segment === 'agendado' && customer.daysUntilNext != null) {
-      if (customer.daysUntilNext <= 0) {
-        return 'Agendado para hoje';
-      }
-      return `Agendado em ${customer.daysUntilNext} dia${customer.daysUntilNext === 1 ? '' : 's'}`;
+      return customer.daysUntilNext <= 0
+        ? 'próxima: hoje'
+        : `próxima em ${customer.daysUntilNext} dia${customer.daysUntilNext === 1 ? '' : 's'}`;
     }
-
-    if (customer.lastVisit == null) {
-      return 'Nunca veio';
-    }
-
-    if (customer.daysSince === 0) {
-      return 'Veio hoje';
-    }
-
-    if (customer.daysSince === 1) {
-      return 'Ontem';
-    }
-
-    return `há ${customer.daysSince} dias`;
+    if (!customer.lastVisit) return '';
+    if (customer.daysSince === 0) return 'última: hoje';
+    if (customer.daysSince === 1) return 'última: ontem';
+    return `última há ${customer.daysSince} dias`;
   }
 
   function buildWhatsappLink(customer) {
@@ -161,6 +154,7 @@
     const action = waLink
       ? `<a class="wa-button" href="${waLink}" target="_blank" rel="noopener">WhatsApp</a>`
       : '<span class="wa-button is-disabled">Telefone inválido</span>';
+    const subText = visitSubText(customer);
 
     return `
       <div class="activity-row activity-row--${customer.segment}">
@@ -169,8 +163,8 @@
           <div class="activity-sub">${e(customer.phone)} · ${petsLine}</div>
         </div>
         <div class="activity-visit">
-          <div class="activity-visit-value">${lastVisitText(customer)}</div>
-          <div class="activity-visit-label">${customer.visitCount} visita${customer.visitCount === 1 ? '' : 's'}</div>
+          <div class="activity-visit-value">${visitCountText(customer)}</div>
+          ${subText ? `<div class="activity-visit-label">${subText}</div>` : ''}
         </div>
         <div class="activity-seg">
           <span class="seg-badge seg-badge--${customer.segment}">${api.getSegmentLabel(customer.segment)}</span>

@@ -50,25 +50,27 @@
         <div class="reception-summary" id="registrySummary"></div>
       </section>
 
-      <section class="reception-grid registry-grid">
-        <aside class="appointments-panel panel registry-master">
-          <div class="panel-heading panel-heading-compact panel-heading-inline">
-            <h2 class="section-title">Clientes</h2>
-            <button type="button" class="primary-button" id="newCustomerBtn">+ Novo cliente</button>
-          </div>
+      <section class="appointments-panel panel registry-full">
+        <div class="panel-heading panel-heading-compact panel-heading-inline">
+          <h2 class="section-title">Clientes</h2>
+          <button type="button" class="primary-button" id="newCustomerBtn">+ Novo cliente</button>
+        </div>
 
-          <div class="registry-toolbar">
-            <input type="search" id="registrySearch" name="registrySearch" placeholder="Buscar por cliente, pet ou telefone">
-          </div>
+        <div class="registry-toolbar registry-toolbar-full">
+          <input type="search" id="registrySearch" name="registrySearch" placeholder="Buscar por cliente, pet ou telefone">
+        </div>
 
-          <div class="registry-list-scroll">
-            <div class="registry-list" id="registryList"></div>
-          </div>
-        </aside>
-
-        <section class="form-panel panel registry-detail" id="detailPanel"></section>
+        <div class="registry-list-scroll registry-list-scroll-full">
+          <div class="registry-list" id="registryList"></div>
+        </div>
       </section>
     </main>
+
+    <div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true">
+      <div class="modal-dialog">
+        <div class="form-panel" id="detailPanel"></div>
+      </div>
+    </div>
 
     <footer class="app-footer">
       <div class="status-online">Conectado</div>

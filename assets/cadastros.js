@@ -140,6 +140,7 @@
         </div>
 
         <div class="submit-row">
+          <button type="button" class="secondary-button" data-action="cancel">Cancelar</button>
           <button type="submit" class="primary-button" id="detailSubmit">${submitLabel}</button>
         </div>
 
@@ -151,7 +152,6 @@
   function render() {
     renderSummary();
     renderRegistryList();
-    renderDetail();
   }
 
   function readDom() {
@@ -191,6 +191,7 @@
 
     renderRegistryList();
     renderDetail();
+    openModal();
   }
 
   function startNewCustomer() {
@@ -199,6 +200,7 @@
     petRows = [newRow()];
     renderRegistryList();
     renderDetail();
+    openModal();
     const nameEl = qs('fullName');
     if (nameEl) nameEl.focus();
   }
@@ -215,6 +217,18 @@
     if (!feedback) return;
     feedback.className = 'feedback';
     feedback.textContent = '';
+  }
+
+  function openModal() {
+    qs('modalOverlay').classList.add('is-open');
+  }
+
+  function closeModal() {
+    qs('modalOverlay').classList.remove('is-open');
+    selectedCustomerId = '';
+    submitting = false;
+    renderSummary();
+    renderRegistryList();
   }
 
   function setSubmitting(value) {
@@ -267,8 +281,8 @@
 
     try {
       const result = await api.saveCustomerWithPets(payload);
-      selectCustomer(result.customer.id);
-      showFeedback(buildSuccessMessage(result), 'success');
+      selectedCustomerId = result.customer.id;
+      closeModal();
     } catch (error) {
       setSubmitting(false);
       showFeedback(error && error.message ? error.message : 'Não foi possível salvar o cadastro.', 'error');
@@ -323,6 +337,11 @@
     });
 
     panel.addEventListener('click', function (event) {
+      if (event.target.closest('[data-action="cancel"]')) {
+        closeModal();
+        return;
+      }
+
       const addBtn = event.target.closest('[data-action="add-pet"]');
       if (addBtn) {
         readDom();
@@ -344,6 +363,16 @@
       }
     });
 
+    qs('modalOverlay').addEventListener('click', function (event) {
+      if (event.target === this) closeModal();
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && qs('modalOverlay').classList.contains('is-open')) {
+        closeModal();
+      }
+    });
+
     window.addEventListener('colina:registry-changed', function () {
       if (selectedCustomerId && !api.getCustomerById(selectedCustomerId)) {
         startNewCustomer();
@@ -356,7 +385,6 @@
   async function init() {
     updateClock();
     bind();
-    startNewCustomer();
 
     try {
       await api.ready();

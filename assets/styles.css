@@ -1965,6 +1965,152 @@ button {
   background: var(--text-muted);
 }
 
+/* ===== Agenda da Parede — layout para leitura à distância ===== */
+.wall-page .section-title {
+  font-size: 1.65rem;
+}
+
+.wall-page .heading-badge {
+  font-size: 1rem;
+  padding: 12px 20px;
+}
+
+.wall-page .turno-name {
+  font-size: 1rem;
+}
+
+.wall-page .turno-count {
+  font-size: 0.86rem;
+  padding: 5px 12px;
+}
+
+.wall-page .summary-chip-value,
+.wall-page .metric-chip-value {
+  font-size: 1.2rem;
+}
+
+.wall-page .summary-chip-label,
+.wall-page .metric-chip-label {
+  font-size: 0.8rem;
+}
+
+.wall-page .agenda-table thead th {
+  font-size: 0.76rem;
+  padding: 13px 18px;
+  letter-spacing: 0.16em;
+}
+
+.wall-page .agenda-table td {
+  padding: 18px 18px;
+  font-size: 1.1rem;
+}
+
+.wall-page .cell-time {
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.wall-page .row-empty .cell-time {
+  font-size: 1.1rem;
+  opacity: 0.4;
+}
+
+.wall-page .slot-message {
+  font-size: 0.9rem;
+  opacity: 0.38;
+}
+
+.wall-page .cell-client strong,
+.wall-page .cell-pet strong {
+  font-size: 1.2rem;
+}
+
+.wall-page .cell-client span,
+.wall-page .cell-pet span {
+  font-size: 0.9rem;
+  margin-top: 5px;
+}
+
+.wall-page .bool-pill,
+.wall-page .service-pill {
+  font-size: 1rem;
+  padding: 10px 18px;
+}
+
+.wall-page .cell-note {
+  font-size: 0.96rem;
+  line-height: 1.5;
+}
+
+.wall-page .row-hour-break td {
+  border-top: 3px solid rgba(194, 177, 137, 0.62);
+}
+
+/* ===== Registry full-width ===== */
+.registry-full {
+  padding: 16px;
+}
+
+.registry-toolbar-full {
+  margin-top: 12px;
+  padding: 0;
+}
+
+.registry-list-scroll-full {
+  margin-top: 12px;
+  padding: 0;
+  max-height: calc(100vh - 320px);
+  overflow-y: auto;
+}
+
+.registry-list-scroll-full::-webkit-scrollbar {
+  width: 10px;
+}
+
+.registry-list-scroll-full::-webkit-scrollbar-thumb {
+  background: rgba(143, 118, 74, 0.32);
+  border-radius: 999px;
+}
+
+/* ===== Modal ===== */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(17, 10, 6, 0.68);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.modal-overlay.is-open {
+  display: flex;
+}
+
+.modal-dialog {
+  width: 100%;
+  max-width: 580px;
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+  border-radius: var(--radius-xl);
+  background: var(--panel-soft);
+  color: var(--text-main);
+  border: 1px solid rgba(220, 207, 182, 0.92);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.44), var(--shadow-xl);
+}
+
+.modal-dialog::-webkit-scrollbar {
+  width: 8px;
+}
+
+.modal-dialog::-webkit-scrollbar-thumb {
+  background: rgba(143, 118, 74, 0.28);
+  border-radius: 999px;
+}
+
 @media (max-width: 720px) {
   .activity-row {
     grid-template-columns: 1fr auto;
