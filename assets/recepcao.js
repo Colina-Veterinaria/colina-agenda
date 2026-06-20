@@ -106,13 +106,14 @@
 
   function renderMiniAppointment(appointment) {
     const services = api.getServiceLabels(appointment).join(' · ') || 'Sem serviço';
+    const teleTag = appointment.tele ? '<span class="tele-tag">🚐 Tele</span>' : '';
     return `
       <article class="mini-appointment">
         <div class="mini-appointment-top">
           <div class="mini-appointment-time">${appointment.arrivalTime}</div>
           <div class="mini-appointment-service">${services}</div>
         </div>
-        <div class="mini-appointment-name">${e(appointment.petName)}</div>
+        <div class="mini-appointment-name">${e(appointment.petName)}${teleTag}</div>
         <div class="mini-appointment-owner">${e(appointment.clientName)} · ${e(appointment.phone)}</div>
         ${appointment.notes ? `<div class="mini-appointment-note">${e(appointment.notes)}</div>` : ''}
       </article>
@@ -357,6 +358,7 @@
       customerId: customer ? customer.id : '',
       petId: pet ? pet.id : '',
       bath: qs('bath').checked,
+      tele: qs('tele').checked,
       groomingType: qs('groomingType').value,
       notes: qs('notes').value,
     };

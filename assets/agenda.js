@@ -29,7 +29,7 @@
     qs('agendaTableBody').innerHTML = `
       <tr class="row-empty row-hour-break">
         <td class="cell-time">--:--</td>
-        <td colspan="7" class="slot-message">${message}</td>
+        <td colspan="8" class="slot-message">${message}</td>
       </tr>
     `;
   }
@@ -129,7 +129,7 @@
           return `
             <tr class="row-empty${row.hourBreak ? ' row-hour-break' : ''}">
               <td class="cell-time">${row.label}</td>
-              <td colspan="7" class="slot-message">livre</td>
+              <td colspan="8" class="slot-message">livre</td>
             </tr>
           `;
         }
@@ -148,6 +148,7 @@
             </td>
             <td>${e(appointment.breed)}</td>
             <td><span class="bool-pill ${appointment.bath ? 'is-yes' : 'is-no'}">${appointment.bath ? 'Sim' : 'Não'}</span></td>
+            <td><span class="bool-pill ${appointment.tele ? 'is-yes' : 'is-no'}">${appointment.tele ? 'Sim' : 'Não'}</span></td>
             <td><span class="service-pill ${groomingLabel ? '' : 'is-empty'}">${groomingLabel || 'Sem tosa'}</span></td>
             <td class="cell-note">${e(appointment.notes) || 'Sem observações.'}</td>
           </tr>

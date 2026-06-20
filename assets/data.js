@@ -289,6 +289,7 @@
       petName: row.pet ? row.pet.name : '',
       breed: row.pet ? row.pet.breed : '',
       bath: Boolean(row.bath),
+      tele: Boolean(row.tele),
       groomingType: row.grooming_type || '',
       notes: row.notes || '',
       status: row.status || 'scheduled',
@@ -298,7 +299,7 @@
   async function fetchAppointments() {
     const url = buildUrl('grooming_appointments', {
       select:
-        'id,customer_id,pet_id,appointment_date,arrival_time,shift,bath,grooming_type,notes,status,customer:customers!grooming_appointments_customer_id_fkey(id,full_name,phone),pet:pets!grooming_appointments_pet_id_fkey(id,name,breed)',
+        'id,customer_id,pet_id,appointment_date,arrival_time,shift,bath,tele,grooming_type,notes,status,customer:customers!grooming_appointments_customer_id_fkey(id,full_name,phone),pet:pets!grooming_appointments_pet_id_fkey(id,name,breed)',
       order: 'appointment_date.asc,arrival_time.asc',
     });
 
@@ -1044,6 +1045,7 @@
         arrival_time: input.arrivalTime,
         shift: getShiftForTime(input.arrivalTime),
         bath: Boolean(input.bath),
+        tele: Boolean(input.tele),
         grooming_type: input.groomingType || null,
         notes: normalizeText(input.notes),
       },
