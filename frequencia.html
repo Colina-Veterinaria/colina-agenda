@@ -51,16 +51,17 @@
             <strong>Ranking por agendamentos</strong>
             <span id="activityMeta"></span>
           </div>
-          <select id="activitySort" aria-label="Ordenar frequência">
-            <option value="appointments_desc">Mais agendamentos</option>
-            <option value="appointments_asc">Menos agendamentos</option>
-            <option value="last_desc">Mais recente</option>
-            <option value="last_asc">Mais antigo</option>
-            <option value="bath_desc">Mais banhos</option>
-            <option value="higienica_desc">Mais tosa higiênica</option>
-            <option value="tesoura_desc">Mais tosa tesoura</option>
-            <option value="maquina_desc">Mais tosa máquina</option>
-          </select>
+          <div class="activity-sort-controls">
+            <select id="activitySortField" aria-label="O que ordenar">
+              <option value="appointments">Agendamentos</option>
+              <option value="last">Último agendamento</option>
+              <option value="bath">Banho</option>
+              <option value="higienica">Tosa higiênica</option>
+              <option value="tesoura">Tosa tesoura</option>
+              <option value="maquina">Tosa máquina</option>
+            </select>
+            <button type="button" id="activitySortDirection" class="sort-direction-button" aria-label="Alternar ordem"></button>
+          </div>
           <input type="search" id="activitySearch" placeholder="Buscar por cliente, pet ou telefone">
         </div>
 

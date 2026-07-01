@@ -1757,6 +1757,12 @@ button {
   color: var(--text-soft);
 }
 
+.activity-sort-controls {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
 .activity-toolbar select,
 .activity-toolbar input[type='search'] {
   border: 1px solid rgba(111, 74, 45, 0.16);
@@ -1773,16 +1779,35 @@ button {
   cursor: pointer;
 }
 
+.sort-direction-button {
+  width: 44px;
+  min-width: 44px;
+  border: 1px solid rgba(111, 74, 45, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--brown-strong);
+  font-size: 1.15rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
 .activity-toolbar input[type='search'] {
   flex: 1;
   min-width: 220px;
   max-width: 360px;
 }
 
+.sort-direction-button:hover {
+  transform: translateY(-1px);
+}
+
+.sort-direction-button:focus,
 .activity-toolbar select:focus,
 .activity-toolbar input[type='search']:focus {
   border-color: rgba(202, 162, 77, 0.66);
   box-shadow: 0 0 0 4px rgba(202, 162, 77, 0.12);
+  outline: none;
 }
 
 .activity-list {
@@ -2085,10 +2110,18 @@ button {
     margin-right: 0;
   }
 
+  .activity-sort-controls {
+    width: 100%;
+  }
+
   .activity-toolbar select,
   .activity-toolbar input[type='search'] {
     width: 100%;
     max-width: none;
+  }
+
+  .sort-direction-button {
+    flex: 0 0 44px;
   }
 }
 

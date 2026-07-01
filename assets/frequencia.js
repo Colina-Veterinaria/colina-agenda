@@ -3,18 +3,17 @@
   const e = api.escapeHtml;
 
   let searchTerm = '';
-  let sortKey = 'appointments_desc';
+  let sortField = 'appointments';
+  let sortDirection = 'desc';
 
-  const SORT_OPTIONS = [
-    { key: 'appointments_desc', label: 'Mais agendamentos' },
-    { key: 'appointments_asc', label: 'Menos agendamentos' },
-    { key: 'last_desc', label: 'Mais recente' },
-    { key: 'last_asc', label: 'Mais antigo' },
-    { key: 'bath_desc', label: 'Mais banhos' },
-    { key: 'higienica_desc', label: 'Mais tosa higiênica' },
-    { key: 'tesoura_desc', label: 'Mais tosa tesoura' },
-    { key: 'maquina_desc', label: 'Mais tosa máquina' },
-  ];
+  const SORT_FIELD_LABELS = {
+    appointments: 'agendamentos',
+    last: 'último agendamento',
+    bath: 'banho',
+    higienica: 'tosa higiênica',
+    tesoura: 'tosa tesoura',
+    maquina: 'tosa máquina',
+  };
 
   function qs(id) {
     return document.getElementById(id);
@@ -31,6 +30,10 @@
     return left.lastAppointmentDate.localeCompare(right.lastAppointmentDate) || left.lastAppointmentTime.localeCompare(right.lastAppointmentTime);
   }
 
+  function compareNames(left, right) {
+    return left.fullName.localeCompare(right.fullName);
+  }
+
   function matchesSearch(row) {
     const term = searchTerm.trim().toLowerCase();
     if (!term) {
@@ -44,35 +47,43 @@
 
   function sortRows(rows) {
     return rows.sort((left, right) => {
-      if (sortKey === 'appointments_asc') {
-        return left.totalAppointments - right.totalAppointments || compareMoments(left, right) || left.fullName.localeCompare(right.fullName);
+      let comparison = 0;
+
+      if (sortField === 'last') {
+        comparison = compareMoments(left, right);
+      } else if (sortField === 'bath') {
+        comparison = left.bathCount - right.bathCount;
+      } else if (sortField === 'higienica') {
+        comparison = left.higienicaCount - right.higienicaCount;
+      } else if (sortField === 'tesoura') {
+        comparison = left.tesouraCount - right.tesouraCount;
+      } else if (sortField === 'maquina') {
+        comparison = left.maquinaCount - right.maquinaCount;
+      } else {
+        comparison = left.totalAppointments - right.totalAppointments;
       }
 
-      if (sortKey === 'last_desc') {
-        return compareMoments(right, left) || right.totalAppointments - left.totalAppointments || left.fullName.localeCompare(right.fullName);
+      if (sortDirection === 'desc') {
+        comparison *= -1;
       }
 
-      if (sortKey === 'last_asc') {
-        return compareMoments(left, right) || right.totalAppointments - left.totalAppointments || left.fullName.localeCompare(right.fullName);
+      if (comparison !== 0) {
+        return comparison;
       }
 
-      if (sortKey === 'bath_desc') {
-        return right.bathCount - left.bathCount || right.totalAppointments - left.totalAppointments || compareMoments(right, left) || left.fullName.localeCompare(right.fullName);
+      if (sortField !== 'appointments') {
+        const appointmentComparison = right.totalAppointments - left.totalAppointments;
+        if (appointmentComparison !== 0) {
+          return appointmentComparison;
+        }
       }
 
-      if (sortKey === 'higienica_desc') {
-        return right.higienicaCount - left.higienicaCount || right.totalAppointments - left.totalAppointments || compareMoments(right, left) || left.fullName.localeCompare(right.fullName);
+      const recencyComparison = compareMoments(right, left);
+      if (recencyComparison !== 0) {
+        return recencyComparison;
       }
 
-      if (sortKey === 'tesoura_desc') {
-        return right.tesouraCount - left.tesouraCount || right.totalAppointments - left.totalAppointments || compareMoments(right, left) || left.fullName.localeCompare(right.fullName);
-      }
-
-      if (sortKey === 'maquina_desc') {
-        return right.maquinaCount - left.maquinaCount || right.totalAppointments - left.totalAppointments || compareMoments(right, left) || left.fullName.localeCompare(right.fullName);
-      }
-
-      return right.totalAppointments - left.totalAppointments || compareMoments(right, left) || left.fullName.localeCompare(right.fullName);
+      return compareNames(left, right);
     });
   }
 
@@ -111,8 +122,17 @@
   }
 
   function renderToolbarMeta(totalRows) {
-    const sort = SORT_OPTIONS.find((option) => option.key === sortKey) || SORT_OPTIONS[0];
-    qs('activityMeta').textContent = `${totalRows} cliente${totalRows === 1 ? '' : 's'} exibido${totalRows === 1 ? '' : 's'} · ordem: ${sort.label.toLowerCase()}`;
+    const fieldLabel = SORT_FIELD_LABELS[sortField] || SORT_FIELD_LABELS.appointments;
+    const directionLabel = sortDirection === 'desc' ? 'maior para menor' : 'menor para maior';
+    qs('activityMeta').textContent = `${totalRows} cliente${totalRows === 1 ? '' : 's'} exibido${totalRows === 1 ? '' : 's'} · ${fieldLabel} · ${directionLabel}`;
+  }
+
+  function renderSortDirectionButton() {
+    const button = qs('activitySortDirection');
+    const isDesc = sortDirection === 'desc';
+    button.textContent = isDesc ? '↑' : '↓';
+    button.setAttribute('aria-label', isDesc ? 'Mostrar menor primeiro' : 'Mostrar maior primeiro');
+    button.setAttribute('title', isDesc ? 'Maior para menor' : 'Menor para maior');
   }
 
   function formatLastAppointment(row) {
@@ -181,6 +201,7 @@
   function render() {
     const rows = getRows();
     renderSummary();
+    renderSortDirectionButton();
     renderToolbarMeta(rows.length);
     renderTable(rows);
   }
@@ -199,8 +220,13 @@
   }
 
   function bind() {
-    qs('activitySort').addEventListener('change', function () {
-      sortKey = qs('activitySort').value;
+    qs('activitySortField').addEventListener('change', function () {
+      sortField = qs('activitySortField').value;
+      render();
+    });
+
+    qs('activitySortDirection').addEventListener('click', function () {
+      sortDirection = sortDirection === 'desc' ? 'asc' : 'desc';
       render();
     });
 
