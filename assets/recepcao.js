@@ -90,45 +90,6 @@
     `;
   }
 
-  function renderGroup(label, appointments) {
-    return `
-      <section class="day-group">
-        <div class="day-group-header">
-          <div class="day-group-title">${label}</div>
-          <div class="day-group-count">${appointments.length} agendado${appointments.length === 1 ? '' : 's'}</div>
-        </div>
-        <div class="day-group-list">
-          ${appointments.length ? appointments.map(renderMiniAppointment).join('') : '<div class="empty-card">Nenhum agendamento neste turno.</div>'}
-        </div>
-      </section>
-    `;
-  }
-
-  function renderMiniAppointment(appointment) {
-    const services = api.getServiceLabels(appointment).join(' · ') || 'Sem serviço';
-    const teleTag = appointment.tele ? '<span class="tele-tag">🚐 Tele</span>' : '';
-    return `
-      <article class="mini-appointment">
-        <div class="mini-appointment-top">
-          <div class="mini-appointment-time">${appointment.arrivalTime}</div>
-          <div class="mini-appointment-service">${services}</div>
-        </div>
-        <div class="mini-appointment-name">${e(appointment.petName)}${teleTag}</div>
-        <div class="mini-appointment-owner">${e(appointment.clientName)} · ${e(appointment.phone)}</div>
-        ${appointment.notes ? `<div class="mini-appointment-note">${e(appointment.notes)}</div>` : ''}
-      </article>
-    `;
-  }
-
-  function renderTodayGroups() {
-    const appointments = api.getAppointmentsByDate(selectedDateKey);
-    const morning = appointments.filter((appointment) => api.getShiftForTime(appointment.arrivalTime) === 'manha');
-    const afternoon = appointments.filter((appointment) => api.getShiftForTime(appointment.arrivalTime) === 'tarde');
-
-    qs('appointmentsTitle').textContent = `Agendamentos de ${api.formatLongDate(selectedDateKey)}`;
-    qs('todayGroups').innerHTML = [renderGroup('Manhã', morning), renderGroup('Tarde', afternoon)].join('');
-  }
-
   function renderMonthlyInsights() {
     const monthCounts = api.getMonthlyGroomingCounts(api.monthKey(selectedDateKey));
     const serviceList = [
@@ -400,7 +361,6 @@
   function render() {
     renderDayNav();
     renderSummary();
-    renderTodayGroups();
     renderMonthlyInsights();
     renderFrequentPets();
     renderSelectionLine();
@@ -408,8 +368,6 @@
 
   function renderError(error) {
     renderDayNav();
-    qs('appointmentsTitle').textContent = 'Agenda indisponível';
-    qs('todayGroups').innerHTML = '<div class="empty-card">Não foi possível carregar os agendamentos do Supabase.</div>';
     qs('serviceRankList').innerHTML = '';
     qs('frequentList').innerHTML = '<div class="empty-card">As métricas voltarão assim que a conexão for restabelecida.</div>';
     showFeedback(error && error.message ? error.message : 'Falha ao carregar dados do Supabase.', 'error');

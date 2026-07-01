@@ -207,6 +207,7 @@
   }
 
   function renderError(error) {
+    renderSortDirectionButton();
     qs('activityMeta').textContent = 'Falha ao carregar frequência.';
     qs('activityList').innerHTML = `<div class="empty-card">${e(error && error.message ? error.message : 'Não foi possível carregar os dados do Supabase.')}</div>`;
   }
@@ -242,6 +243,8 @@
   async function init() {
     updateClock();
     bind();
+    renderSortDirectionButton();
+    renderToolbarMeta(0);
 
     try {
       await api.ready();
