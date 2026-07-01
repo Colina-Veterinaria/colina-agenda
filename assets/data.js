@@ -15,6 +15,10 @@
   const WEEKDAYS_LONG = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
   const MONTHS_LONG = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
   const PET_EMOJIS = ['🐶', '🐱', '🐾', '🐶', '🐱'];
+  const CURRENCY_FORMATTER = new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  });
 
   const state = {
     appointments: [],
@@ -30,7 +34,7 @@
   // a página hidrata o estado na hora e revalida no Supabase em segundo plano.
   // A versão protege contra formatos antigos quando o normalize mudar.
   const CACHE_KEYS = {
-    appointments: 'colina:v1:appointments',
+    appointments: 'colina:v2:appointments',
     customers: 'colina:v1:customers',
   };
 
@@ -186,6 +190,31 @@
     return labels;
   }
 
+  function normalizeChargedAmount(value) {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+
+    const raw = String(value).trim();
+    if (!raw) {
+      return null;
+    }
+
+    const normalized = raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw;
+    const amount = Number(normalized);
+
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new Error('Informe um valor cobrado v\u00e1lido.');
+    }
+
+    return Math.round(amount * 100) / 100;
+  }
+
+  function formatCurrency(value) {
+    const amount = normalizeChargedAmount(value);
+    return amount === null ? '' : CURRENCY_FORMATTER.format(amount);
+  }
+
   function compareAppointments(left, right) {
     return (
       left.date.localeCompare(right.date) ||
@@ -288,6 +317,7 @@
       bath: Boolean(row.bath),
       tele: Boolean(row.tele),
       groomingType: row.grooming_type || '',
+      chargedAmount: normalizeChargedAmount(row.charged_amount),
       notes: row.notes || '',
       status: row.status || 'scheduled',
     };
@@ -296,7 +326,7 @@
   async function fetchAppointments() {
     const url = buildUrl('grooming_appointments', {
       select:
-        'id,customer_id,pet_id,appointment_date,arrival_time,shift,bath,tele,grooming_type,notes,status,customer:customers!grooming_appointments_customer_id_fkey(id,full_name,phone),pet:pets!grooming_appointments_pet_id_fkey(id,name,breed)',
+        'id,customer_id,pet_id,appointment_date,arrival_time,shift,bath,tele,grooming_type,charged_amount,notes,status,customer:customers!grooming_appointments_customer_id_fkey(id,full_name,phone),pet:pets!grooming_appointments_pet_id_fkey(id,name,breed)',
       order: 'appointment_date.asc,arrival_time.asc',
     });
 
@@ -397,6 +427,11 @@
 
   function getAppointments() {
     return clone(state.appointments);
+  }
+
+  function getAppointmentById(appointmentId) {
+    const appointment = state.appointments.find((item) => item.id === appointmentId);
+    return appointment ? clone(appointment) : null;
   }
 
   function getCustomers() {
@@ -645,12 +680,17 @@
   }
 
   function hasConflict(nextAppointment) {
+    const currentAppointmentId = normalizeText(nextAppointment.id);
     const nextPetId = normalizeText(nextAppointment.petId);
     const nextPetName = nextPetId
       ? ''
       : normalizeText(nextAppointment.petName || (getPetRecordById(nextAppointment.customerId, nextAppointment.petId) || {}).name);
 
     return state.appointments.some((appointment) => {
+      if (currentAppointmentId && appointment.id === currentAppointmentId) {
+        return false;
+      }
+
       if (appointment.date !== nextAppointment.date || appointment.arrivalTime !== nextAppointment.arrivalTime) {
         return false;
       }
@@ -688,6 +728,16 @@
         Prefer: 'return=representation',
       },
       body: JSON.stringify(values),
+    });
+  }
+
+  async function deleteRows(table, filters) {
+    const url = buildUrl(table, { ...filters, select: '*' });
+    return requestJson(url, {
+      method: 'DELETE',
+      headers: {
+        Prefer: 'return=representation',
+      },
     });
   }
 
@@ -1057,12 +1107,71 @@
         bath: Boolean(input.bath),
         tele: Boolean(input.tele),
         grooming_type: input.groomingType || null,
+        charged_amount: normalizeChargedAmount(input.chargedAmount),
         notes: normalizeText(input.notes),
       },
     ]);
 
     await Promise.all([refreshAppointments(), refreshCustomers()]);
     return state.appointments.find((appointment) => appointment.id === created[0].id);
+  }
+
+  async function updateAppointment(input) {
+    await ready();
+
+    const appointmentId = normalizeText(input.id);
+    if (!appointmentId) {
+      throw new Error('Selecione um agendamento para editar.');
+    }
+
+    if (hasConflict(input)) {
+      throw new Error('J\u00e1 existe um agendamento para este pet no mesmo dia e hor\u00e1rio.');
+    }
+
+    const customer = await ensureCustomerSelection(input.customerId);
+    const pet = await ensurePetSelection(customer.id, input.petId);
+
+    const updated = await updateRows(
+      'grooming_appointments',
+      { id: `eq.${appointmentId}` },
+      {
+        customer_id: customer.id,
+        pet_id: pet.id,
+        appointment_date: input.date,
+        arrival_time: input.arrivalTime,
+        shift: getShiftForTime(input.arrivalTime),
+        bath: Boolean(input.bath),
+        tele: Boolean(input.tele),
+        grooming_type: input.groomingType || null,
+        charged_amount: normalizeChargedAmount(input.chargedAmount),
+        notes: normalizeText(input.notes),
+      }
+    );
+
+    if (!updated.length) {
+      throw new Error('N\u00e3o foi poss\u00edvel encontrar o agendamento para atualizar.');
+    }
+
+    await refreshAppointments();
+    return state.appointments.find((appointment) => appointment.id === updated[0].id) || null;
+  }
+
+  async function deleteAppointment(appointmentId) {
+    await ready();
+
+    const id = normalizeText(appointmentId);
+    if (!id) {
+      throw new Error('Selecione um agendamento para excluir.');
+    }
+
+    const deleted = await deleteRows('grooming_appointments', { id: `eq.${id}` });
+
+    if (!deleted.length) {
+      throw new Error('Não foi possível encontrar o agendamento para excluir.');
+    }
+
+    await refreshAppointments();
+    return normalizeAppointment(deleted[0]);
   }
 
   function buildDayWindow(centerDateKey, radius) {
@@ -1094,6 +1203,7 @@
     refreshAppointments,
     refreshCustomers,
     getAppointments,
+    getAppointmentById,
     getCustomers,
     getCustomerById,
     getPetsByCustomerId,
@@ -1108,6 +1218,8 @@
     getCustomerFrequencySummary,
     hasConflict,
     addAppointment,
+    updateAppointment,
+    deleteAppointment,
     addCustomerRegistration,
     saveCustomerRegistration,
     saveCustomerWithPets,
@@ -1124,6 +1236,7 @@
     getShiftLabel,
     getGroomingLabel,
     getServiceLabels,
+    formatCurrency,
     formatPhone,
     isValidPhone,
     phoneDigits,

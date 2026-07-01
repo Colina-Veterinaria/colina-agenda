@@ -79,7 +79,7 @@
         <div class="table-scroll">
           <table class="agenda-table">
             <colgroup>
-              <col><col><col><col><col><col><col><col><col>
+              <col><col><col><col><col><col><col><col><col><col>
             </colgroup>
             <thead>
               <tr>
@@ -91,6 +91,7 @@
                 <th>Banho</th>
                 <th>Tele</th>
                 <th>Tosa</th>
+                <th>Valor</th>
                 <th>Observação</th>
               </tr>
             </thead>
@@ -106,6 +107,97 @@
       <div class="status-online">Conectado</div>
       <div id="footerUpdated"></div>
     </footer>
+  </div>
+
+  <div class="modal-overlay" id="appointmentEditOverlay" aria-hidden="true">
+    <div class="modal-dialog appointment-edit-dialog">
+      <div class="modal-body">
+        <div class="panel-heading panel-heading-compact panel-heading-inline">
+          <div>
+            <p class="eyebrow">Agenda da Parede</p>
+            <h2 class="section-title">Editar agendamento</h2>
+          </div>
+          <button type="button" class="secondary-button" id="appointmentEditClose">Fechar</button>
+        </div>
+
+        <form id="appointmentEditForm">
+          <div class="form-grid">
+            <div class="field">
+              <label class="field-label" for="editAppointmentDate">Data</label>
+              <input type="date" id="editAppointmentDate" name="editAppointmentDate" required>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="editArrivalTime">Chegada</label>
+              <input type="time" id="editArrivalTime" name="editArrivalTime" step="900" required>
+            </div>
+
+            <div class="field is-wide">
+              <label class="field-label" for="editCustomerLookup">Buscar cliente</label>
+              <div class="search-shell">
+                <input type="search" id="editCustomerLookup" name="editCustomerLookup" placeholder="Pesquisar por cliente, pet ou telefone" autocomplete="off">
+                <div class="search-results" id="editLookupResults"></div>
+              </div>
+            </div>
+
+            <div class="field is-wide">
+              <span class="field-label">Cadastro selecionado</span>
+              <div class="selection-line" id="editSelectedProfileLine"></div>
+            </div>
+
+            <div class="field is-wide" id="editPetPickerField" hidden>
+              <div class="pet-picker" id="editPetPicker"></div>
+            </div>
+
+            <div class="field is-wide">
+              <span class="field-label">Serviços</span>
+              <div class="service-options">
+                <div class="check-card">
+                  <label for="editBath">
+                    <input type="checkbox" id="editBath" name="editBath">
+                    Incluir banho
+                  </label>
+                </div>
+
+                <div class="check-card">
+                  <label for="editTele">
+                    <input type="checkbox" id="editTele" name="editTele">
+                    Tele (busca do pet)
+                  </label>
+                </div>
+
+                <div class="field">
+                  <label class="field-label" for="editGroomingType">Tosa</label>
+                  <select id="editGroomingType" name="editGroomingType">
+                    <option value="">Sem tosa</option>
+                    <option value="higienica">Tosa Higiênica</option>
+                    <option value="tesoura">Tosa Tesoura</option>
+                    <option value="maquina">Tosa Máquina</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label class="field-label" for="editChargedAmount">Valor cobrado</label>
+                  <input type="text" id="editChargedAmount" name="editChargedAmount" inputmode="decimal" placeholder="Opcional">
+                </div>
+              </div>
+            </div>
+
+            <div class="field is-wide">
+              <label class="field-label" for="editNotes">Observação</label>
+              <textarea id="editNotes" name="editNotes" placeholder="Orientações de retirada, preferências do cliente ou cuidados do pet"></textarea>
+            </div>
+          </div>
+
+          <div class="submit-row">
+            <button type="button" class="secondary-button" id="appointmentEditCancel">Cancelar</button>
+            <button type="submit" class="primary-button" id="appointmentEditSubmit">Salvar alterações</button>
+          </div>
+
+          <div class="feedback" id="appointmentEditFeedback" role="status" aria-live="polite"></div>
+        </form>
+      </div>
+    </div>
   </div>
 
   <script src="assets/data.js"></script>

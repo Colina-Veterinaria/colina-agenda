@@ -174,6 +174,7 @@
     const customer = getSelectedCustomer();
     const shouldHideResults = customer && query === buildLookupLabel(customer);
     const results = query && !shouldHideResults ? getLookupResults() : [];
+    const shouldShowEmpty = Boolean(query) && !shouldHideResults;
 
     qs('lookupResults').innerHTML = results.length
       ? results
@@ -191,7 +192,7 @@
             `;
           })
           .join('')
-      : query
+      : shouldShowEmpty
         ? '<div class="search-result-empty">Nenhum cadastro encontrado.</div>'
         : '';
   }
@@ -321,6 +322,7 @@
       bath: qs('bath').checked,
       tele: qs('tele').checked,
       groomingType: qs('groomingType').value,
+      chargedAmount: qs('chargedAmount').value,
       notes: qs('notes').value,
     };
 
@@ -350,6 +352,7 @@
       qs('bath').checked = true;
       qs('customerLookup').value = buildLookupLabel(getSelectedCustomer());
       render();
+      renderLookupResults();
       showFeedback(`Agendamento salvo para ${saved.petName} às ${saved.arrivalTime}.`, 'success');
     } catch (error) {
       showFeedback(error && error.message ? error.message : 'Não foi possível salvar o agendamento.', 'error');
@@ -364,6 +367,7 @@
     renderMonthlyInsights();
     renderFrequentPets();
     renderSelectionLine();
+    renderLookupResults();
   }
 
   function renderError(error) {

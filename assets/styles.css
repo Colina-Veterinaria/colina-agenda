@@ -522,41 +522,49 @@ button {
 
 .agenda-table {
   width: 100%;
-  min-width: 1180px;
+  min-width: 0;
   border-collapse: collapse;
   table-layout: fixed;
 }
 
 .agenda-table col:nth-child(1) {
-  width: 92px;
+  width: 7%;
 }
 
 .agenda-table col:nth-child(2) {
-  width: 138px;
+  width: 11%;
 }
 
 .agenda-table col:nth-child(3) {
-  width: 210px;
+  width: 14%;
 }
 
 .agenda-table col:nth-child(4) {
-  width: 164px;
+  width: 12%;
 }
 
 .agenda-table col:nth-child(5) {
-  width: 164px;
+  width: 12%;
 }
 
 .agenda-table col:nth-child(6) {
-  width: 108px;
+  width: 7%;
 }
 
 .agenda-table col:nth-child(7) {
-  width: 108px;
+  width: 7%;
 }
 
 .agenda-table col:nth-child(8) {
-  width: 190px;
+  width: 12%;
+}
+
+.agenda-table col:nth-child(9) {
+  width: 9%;
+}
+
+.agenda-table col:nth-child(10) {
+  width: 9%;
 }
 
 .agenda-table thead th {
@@ -593,6 +601,10 @@ button {
 
 .agenda-table tbody tr:nth-child(even) {
   background: rgba(245, 238, 225, 0.7);
+}
+
+.agenda-row {
+  position: relative;
 }
 
 .agenda-table td {
@@ -665,10 +677,129 @@ button {
   color: var(--text-soft);
 }
 
+.money-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(202, 162, 77, 0.16);
+  color: var(--gold-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.money-pill.is-empty {
+  background: rgba(111, 74, 45, 0.08);
+  color: var(--text-soft);
+}
+
 .cell-note {
   color: var(--text-soft);
   font-size: 0.88rem;
   line-height: 1.45;
+  word-break: break-word;
+}
+
+.row-visual {
+  display: inline-block;
+  max-width: 100%;
+  transition: filter 190ms ease, opacity 190ms ease, transform 190ms ease;
+}
+
+.cell-client .row-visual,
+.cell-pet .row-visual,
+.cell-note-copy.row-visual {
+  display: block;
+}
+
+.cell-note-layout {
+  display: block;
+}
+
+.cell-note-copy {
+  min-width: 0;
+}
+
+.row-inline-actions {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  opacity: 0;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: rgba(58, 39, 25, 0.82);
+  box-shadow: 0 18px 40px rgba(38, 25, 15, 0.28);
+  transition: opacity 160ms ease, transform 160ms ease;
+  z-index: 4;
+}
+
+.table-inline-action {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.agenda-row:hover .row-inline-actions,
+.agenda-row.is-actions-open .row-inline-actions,
+.agenda-row:focus-within .row-inline-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.agenda-row:hover .row-visual,
+.agenda-row.is-actions-open .row-visual,
+.agenda-row:focus-within .row-visual {
+  filter: blur(2.2px);
+  opacity: 0.24;
+  transform: scale(0.995);
+}
+
+.table-inline-action.is-edit {
+  background: linear-gradient(180deg, #f1ca61 0%, #c99125 100%);
+  border-color: rgba(255, 226, 152, 0.42);
+  color: #4b2e08;
+  box-shadow: 0 8px 20px rgba(201, 145, 37, 0.32);
+}
+
+.table-inline-action.is-edit:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, #f6d46f 0%, #d79d2c 100%);
+  border-color: rgba(255, 236, 179, 0.54);
+  color: #3e2404;
+}
+
+.table-inline-action.is-danger {
+  background: linear-gradient(180deg, #ff8d88 0%, #d64d4d 100%);
+  border-color: rgba(255, 196, 196, 0.42);
+  color: #fff5f5;
+  box-shadow: 0 8px 20px rgba(214, 77, 77, 0.3);
+}
+
+.table-inline-action.is-danger:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, #ff9c96 0%, #de5555 100%);
+  border-color: rgba(255, 219, 219, 0.5);
+  color: #ffffff;
 }
 
 .row-empty td {
@@ -1985,18 +2116,18 @@ button {
 }
 
 .wall-page .agenda-table thead th {
-  font-size: 0.76rem;
-  padding: 13px 18px;
-  letter-spacing: 0.16em;
+  font-size: 0.7rem;
+  padding: 11px 12px;
+  letter-spacing: 0.12em;
 }
 
 .wall-page .agenda-table td {
-  padding: 18px 18px;
-  font-size: 1.1rem;
+  padding: 12px 10px;
+  font-size: 0.92rem;
 }
 
 .wall-page .cell-time {
-  font-size: 2rem;
+  font-size: 1.45rem;
   letter-spacing: -0.02em;
 }
 
@@ -2012,24 +2143,36 @@ button {
 
 .wall-page .cell-client strong,
 .wall-page .cell-pet strong {
-  font-size: 1.2rem;
+  font-size: 1rem;
 }
 
 .wall-page .cell-client span,
 .wall-page .cell-pet span {
-  font-size: 0.9rem;
-  margin-top: 5px;
+  font-size: 0.8rem;
+  margin-top: 4px;
 }
 
 .wall-page .bool-pill,
-.wall-page .service-pill {
-  font-size: 1rem;
-  padding: 10px 18px;
+.wall-page .service-pill,
+.wall-page .money-pill {
+  font-size: 0.82rem;
+  padding: 8px 10px;
 }
 
 .wall-page .cell-note {
-  font-size: 0.96rem;
-  line-height: 1.5;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.wall-page .row-inline-actions {
+  gap: 10px;
+  padding: 7px 10px;
+}
+
+.wall-page .table-inline-action {
+  width: 38px;
+  height: 38px;
+  font-size: 1.1rem;
 }
 
 .wall-page .row-hour-break td {
@@ -2099,6 +2242,14 @@ button {
 .modal-dialog::-webkit-scrollbar-thumb {
   background: rgba(143, 118, 74, 0.28);
   border-radius: 999px;
+}
+
+.modal-body {
+  padding: 18px 22px 24px;
+}
+
+.appointment-edit-dialog {
+  max-width: 760px;
 }
 
 @media (max-width: 720px) {
