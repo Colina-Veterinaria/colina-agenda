@@ -10,18 +10,6 @@
     manha: 'Manhã',
     tarde: 'Tarde',
   };
-  // Limiares de reaquecimento (em dias desde a última visita).
-  const ACTIVITY_THRESHOLDS = {
-    active: 30,
-    cooling: 60,
-  };
-  const SEGMENT_LABELS = {
-    agendado: 'Agendado',
-    ativo: 'Ativo',
-    esfriando: 'Esfriando',
-    inativo: 'Inativo',
-    novo: 'Sem visita',
-  };
   const MONTHS_SHORT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
   const WEEKDAYS_SHORT = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
   const WEEKDAYS_LONG = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
@@ -123,6 +111,11 @@
     return MONTHS_SHORT[fromDateKey(dateKey).getMonth()];
   }
 
+  function formatShortDate(dateKey) {
+    const date = fromDateKey(dateKey);
+    return `${String(date.getDate()).padStart(2, '0')} ${MONTHS_SHORT[date.getMonth()]} ${date.getFullYear()}`;
+  }
+
   function formatWeekdayShort(dateKey) {
     return WEEKDAYS_SHORT[fromDateKey(dateKey).getDay()];
   }
@@ -207,6 +200,10 @@
 
   function compareCustomers(left, right) {
     return left.fullName.localeCompare(right.fullName) || phoneDigits(left.phone).localeCompare(phoneDigits(right.phone));
+  }
+
+  function compareAppointmentMoments(leftDate, leftTime, rightDate, rightTime) {
+    return leftDate.localeCompare(rightDate) || parseMinutes(leftTime) - parseMinutes(rightTime);
   }
 
   function clone(value) {
@@ -547,40 +544,8 @@
       }));
   }
 
-  function daysBetween(fromKey, toKey) {
-    const from = fromDateKey(fromKey);
-    const to = fromDateKey(toKey);
-    return Math.round((to - from) / 86400000);
-  }
-
-  function getSegmentLabel(segment) {
-    return SEGMENT_LABELS[segment] || 'Cliente';
-  }
-
-  function segmentFor(info, daysSince) {
-    if (info.nextVisit) {
-      return 'agendado';
-    }
-
-    if (info.lastVisit === null) {
-      return 'novo';
-    }
-
-    if (daysSince <= ACTIVITY_THRESHOLDS.active) {
-      return 'ativo';
-    }
-
-    if (daysSince <= ACTIVITY_THRESHOLDS.cooling) {
-      return 'esfriando';
-    }
-
-    return 'inativo';
-  }
-
-  // Enriquece cada cliente com última visita, próximo agendamento, dias sem
-  // vir e segmento de reaquecimento. Base da tela de Frequência.
-  function getCustomerActivity() {
-    const todayKey = toDateKey(new Date());
+  function getCustomerFrequencyRows() {
+    const customerById = new Map(state.customers.map((customer) => [customer.id, customer]));
     const byCustomer = new Map();
 
     state.appointments.forEach((appointment) => {
@@ -588,50 +553,95 @@
         return;
       }
 
+      const customer = customerById.get(appointment.customerId);
       const entry = byCustomer.get(appointment.customerId) || {
-        lastVisit: null,
-        nextVisit: null,
-        visitCount: 0,
+        customerId: appointment.customerId,
+        fullName: appointment.clientName || (customer ? customer.fullName : ''),
+        phone: appointment.phone || (customer ? customer.phone : ''),
+        petNames: customer ? customer.pets.map((pet) => pet.name) : [],
+        totalAppointments: 0,
+        bathCount: 0,
+        higienicaCount: 0,
+        tesouraCount: 0,
+        maquinaCount: 0,
+        groomingCount: 0,
+        firstAppointmentDate: '',
+        firstAppointmentTime: '',
+        lastAppointmentDate: '',
+        lastAppointmentTime: '',
+        lastPetName: '',
       };
 
-      if (appointment.date <= todayKey) {
-        entry.visitCount += 1;
-        if (!entry.lastVisit || appointment.date > entry.lastVisit) {
-          entry.lastVisit = appointment.date;
-        }
-      } else if (!entry.nextVisit || appointment.date < entry.nextVisit) {
-        entry.nextVisit = appointment.date;
+      entry.totalAppointments += 1;
+
+      if (appointment.bath) {
+        entry.bathCount += 1;
+      }
+
+      if (appointment.groomingType === 'higienica') {
+        entry.higienicaCount += 1;
+      } else if (appointment.groomingType === 'tesoura') {
+        entry.tesouraCount += 1;
+      } else if (appointment.groomingType === 'maquina') {
+        entry.maquinaCount += 1;
+      }
+
+      entry.groomingCount = entry.higienicaCount + entry.tesouraCount + entry.maquinaCount;
+
+      if (
+        !entry.firstAppointmentDate ||
+        compareAppointmentMoments(appointment.date, appointment.arrivalTime, entry.firstAppointmentDate, entry.firstAppointmentTime) < 0
+      ) {
+        entry.firstAppointmentDate = appointment.date;
+        entry.firstAppointmentTime = appointment.arrivalTime;
+      }
+
+      if (
+        !entry.lastAppointmentDate ||
+        compareAppointmentMoments(appointment.date, appointment.arrivalTime, entry.lastAppointmentDate, entry.lastAppointmentTime) > 0
+      ) {
+        entry.lastAppointmentDate = appointment.date;
+        entry.lastAppointmentTime = appointment.arrivalTime;
+        entry.lastPetName = appointment.petName;
       }
 
       byCustomer.set(appointment.customerId, entry);
     });
 
-    return state.customers.map((customer) => {
-      const info = byCustomer.get(customer.id) || { lastVisit: null, nextVisit: null, visitCount: 0 };
-      const daysSince = info.lastVisit ? daysBetween(info.lastVisit, todayKey) : null;
-      const daysUntilNext = info.nextVisit ? daysBetween(todayKey, info.nextVisit) : null;
-
-      return {
-        ...clone(customer),
-        lastVisit: info.lastVisit,
-        nextVisit: info.nextVisit,
-        daysSince,
-        daysUntilNext,
-        visitCount: info.visitCount,
-        segment: segmentFor(info, daysSince),
-      };
-    });
+    return Array.from(byCustomer.values())
+      .map((entry) => ({
+        ...entry,
+        petNames: entry.petNames.join(' · '),
+      }))
+      .sort((left, right) => {
+        return (
+          right.totalAppointments - left.totalAppointments ||
+          compareAppointmentMoments(right.lastAppointmentDate, right.lastAppointmentTime, left.lastAppointmentDate, left.lastAppointmentTime) ||
+          left.fullName.localeCompare(right.fullName)
+        );
+      });
   }
 
-  function getActivitySummary() {
-    const counts = { ativo: 0, esfriando: 0, inativo: 0, novo: 0, agendado: 0 };
-    const list = getCustomerActivity();
-
-    list.forEach((customer) => {
-      counts[customer.segment] += 1;
-    });
-
-    return { total: list.length, ...counts };
+  function getCustomerFrequencySummary() {
+    return getCustomerFrequencyRows().reduce(
+      (summary, row) => {
+        summary.totalCustomers += 1;
+        summary.totalAppointments += row.totalAppointments;
+        summary.bathCount += row.bathCount;
+        summary.higienicaCount += row.higienicaCount;
+        summary.tesouraCount += row.tesouraCount;
+        summary.maquinaCount += row.maquinaCount;
+        return summary;
+      },
+      {
+        totalCustomers: 0,
+        totalAppointments: 0,
+        bathCount: 0,
+        higienicaCount: 0,
+        tesouraCount: 0,
+        maquinaCount: 0,
+      }
+    );
   }
 
   function hasConflict(nextAppointment) {
@@ -1094,9 +1104,8 @@
     getDaySummary,
     getMonthlyGroomingCounts,
     getFrequentPets,
-    getCustomerActivity,
-    getActivitySummary,
-    getSegmentLabel,
+    getCustomerFrequencyRows,
+    getCustomerFrequencySummary,
     hasConflict,
     addAppointment,
     addCustomerRegistration,
@@ -1106,6 +1115,7 @@
     toDateKey,
     fromDateKey,
     formatLongDate,
+    formatShortDate,
     formatMonthYear,
     formatMonthShort,
     formatWeekdayShort,

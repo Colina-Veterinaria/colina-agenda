@@ -41,13 +41,26 @@
 
     <main class="page-main">
       <section class="summary-strip panel">
-        <h1 class="section-title">Frequência &amp; reativação</h1>
+        <h1 class="section-title">Frequência de clientes</h1>
         <div class="reception-summary" id="activitySummary"></div>
       </section>
 
       <section class="form-panel panel">
         <div class="panel-heading panel-heading-compact panel-heading-inline activity-toolbar">
-          <div class="segment-tabs" id="segmentTabs" aria-label="Filtro por segmento"></div>
+          <div class="activity-toolbar-copy">
+            <strong>Ranking por agendamentos</strong>
+            <span id="activityMeta"></span>
+          </div>
+          <select id="activitySort" aria-label="Ordenar frequência">
+            <option value="appointments_desc">Mais agendamentos</option>
+            <option value="appointments_asc">Menos agendamentos</option>
+            <option value="last_desc">Mais recente</option>
+            <option value="last_asc">Mais antigo</option>
+            <option value="bath_desc">Mais banhos</option>
+            <option value="higienica_desc">Mais tosa higiênica</option>
+            <option value="tesoura_desc">Mais tosa tesoura</option>
+            <option value="maquina_desc">Mais tosa máquina</option>
+          </select>
           <input type="search" id="activitySearch" placeholder="Buscar por cliente, pet ou telefone">
         </div>
 
