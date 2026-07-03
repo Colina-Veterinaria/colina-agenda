@@ -528,11 +528,11 @@ button {
 }
 
 .agenda-table col:nth-child(1) {
-  width: 7%;
+  width: 8%;
 }
 
 .agenda-table col:nth-child(2) {
-  width: 11%;
+  width: 12%;
 }
 
 .agenda-table col:nth-child(3) {
@@ -544,7 +544,7 @@ button {
 }
 
 .agenda-table col:nth-child(5) {
-  width: 12%;
+  width: 10%;
 }
 
 .agenda-table col:nth-child(6) {
@@ -556,7 +556,7 @@ button {
 }
 
 .agenda-table col:nth-child(8) {
-  width: 12%;
+  width: 11%;
 }
 
 .agenda-table col:nth-child(9) {
@@ -564,7 +564,7 @@ button {
 }
 
 .agenda-table col:nth-child(10) {
-  width: 9%;
+  width: 10%;
 }
 
 .agenda-table thead th {
@@ -607,12 +607,46 @@ button {
   position: relative;
 }
 
+.agenda-row .cell-time {
+  position: relative;
+}
+
+.agenda-row .cell-time::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.agenda-table tbody tr.agenda-row.is-attendance-present {
+  background: linear-gradient(90deg, rgba(122, 210, 159, 0.14) 0%, rgba(122, 210, 159, 0.02) 26%, transparent 60%);
+}
+
+.agenda-table tbody tr.agenda-row.is-attendance-completed {
+  background: linear-gradient(90deg, rgba(107, 151, 220, 0.14) 0%, rgba(107, 151, 220, 0.02) 26%, transparent 60%);
+}
+
+.agenda-row.is-attendance-present .cell-time::before {
+  opacity: 1;
+  background: linear-gradient(180deg, #7ad29f 0%, #4ca56c 100%);
+}
+
+.agenda-row.is-attendance-completed .cell-time::before {
+  opacity: 1;
+  background: linear-gradient(180deg, #7fa8ea 0%, #5578c7 100%);
+}
+
 .agenda-table td {
   padding: 10px 12px;
   vertical-align: middle;
   font-size: 0.9rem;
   color: var(--text-main);
   border-right: 1px solid rgba(220, 207, 182, 0.5);
+  overflow: hidden;
 }
 
 .agenda-table td:last-child {
@@ -631,11 +665,21 @@ button {
   color: var(--brown);
 }
 
+.attendance-time {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .cell-client strong,
 .cell-pet strong {
   display: block;
   font-size: 0.98rem;
   color: var(--brown-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cell-client span,
@@ -655,6 +699,17 @@ button {
   font-size: 0.78rem;
   font-weight: 800;
   line-height: 1;
+  white-space: nowrap;
+}
+
+.service-pill,
+.money-pill {
+  max-width: 100%;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .bool-pill.is-yes {
@@ -686,7 +741,7 @@ button {
   color: var(--gold-muted);
   font-size: 0.78rem;
   font-weight: 800;
-  line-height: 1;
+  line-height: 1.15;
   white-space: nowrap;
 }
 
@@ -699,12 +754,13 @@ button {
   color: var(--text-soft);
   font-size: 0.88rem;
   line-height: 1.45;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .row-visual {
   display: inline-block;
   max-width: 100%;
+  overflow: hidden;
   transition: filter 190ms ease, opacity 190ms ease, transform 190ms ease;
 }
 
@@ -719,7 +775,12 @@ button {
 }
 
 .cell-note-copy {
+  display: block;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .row-inline-actions {
@@ -730,10 +791,13 @@ button {
   opacity: 0;
   pointer-events: none;
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 6px 8px;
-  border-radius: 999px;
+  max-width: min(520px, calc(100% - 24px));
+  padding: 8px 10px;
+  border-radius: 18px;
   background: rgba(58, 39, 25, 0.82);
   box-shadow: 0 18px 40px rgba(38, 25, 15, 0.28);
   transition: opacity 160ms ease, transform 160ms ease;
@@ -742,20 +806,30 @@ button {
 
 .table-inline-action {
   flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
+  min-height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  gap: 6px;
+  padding: 0 12px;
   border-radius: 999px;
   border: 2px solid transparent;
   color: #fff;
-  font-size: 1rem;
+  font-size: 0.74rem;
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
   transition: background 160ms ease, transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.table-inline-action:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.table-inline-action-icon {
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 .agenda-row:hover .row-inline-actions,
@@ -788,6 +862,41 @@ button {
   color: #3e2404;
 }
 
+.table-inline-action.is-arrival {
+  background: linear-gradient(180deg, #9be0b4 0%, #4ca56c 100%);
+  border-color: rgba(198, 247, 214, 0.42);
+  color: #173d22;
+  box-shadow: 0 8px 20px rgba(76, 165, 108, 0.3);
+}
+
+.table-inline-action.is-arrival:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, #a8e8bf 0%, #55b172 100%);
+}
+
+.table-inline-action.is-departure {
+  background: linear-gradient(180deg, #9fc0f1 0%, #5578c7 100%);
+  border-color: rgba(217, 229, 255, 0.45);
+  color: #11284f;
+  box-shadow: 0 8px 20px rgba(85, 120, 199, 0.3);
+}
+
+.table-inline-action.is-departure:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, #afcbf5 0%, #6487d5 100%);
+}
+
+.table-inline-action.is-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #f7f1e4;
+}
+
+.table-inline-action.is-secondary:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.18);
+}
+
 .table-inline-action.is-danger {
   background: linear-gradient(180deg, #ff8d88 0%, #d64d4d 100%);
   border-color: rgba(255, 196, 196, 0.42);
@@ -800,6 +909,12 @@ button {
   background: linear-gradient(180deg, #ff9c96 0%, #de5555 100%);
   border-color: rgba(255, 219, 219, 0.5);
   color: #ffffff;
+}
+
+.inline-actions-status {
+  font-size: 0.72rem;
+  color: rgba(247, 241, 228, 0.78);
+  padding: 0 4px;
 }
 
 .row-empty td {
@@ -2170,9 +2285,9 @@ button {
 }
 
 .wall-page .table-inline-action {
-  width: 38px;
   height: 38px;
-  font-size: 1.1rem;
+  font-size: 0.74rem;
+  white-space: nowrap;
 }
 
 .wall-page .row-hour-break td {
@@ -2248,8 +2363,42 @@ button {
   padding: 18px 22px 24px;
 }
 
+.modal-body-compact {
+  padding: 20px 22px 22px;
+}
+
 .appointment-edit-dialog {
   max-width: 760px;
+}
+
+.appointment-delete-dialog {
+  max-width: 440px;
+}
+
+.appointment-delete-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.modal-copy {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-soft);
+}
+
+.submit-row-compact {
+  margin-top: 20px;
+  gap: 10px;
+}
+
+.danger-button {
+  background: linear-gradient(135deg, #ee7b75 0%, #c84242 100%);
+  color: #fff9f9;
+  box-shadow: 0 10px 22px rgba(200, 66, 66, 0.24);
+}
+
+.danger-button:hover {
+  box-shadow: 0 18px 32px rgba(200, 66, 66, 0.3);
 }
 
 @media (max-width: 720px) {
