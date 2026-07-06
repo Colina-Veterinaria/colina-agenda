@@ -19,6 +19,8 @@
     style: 'currency',
     currency: 'BRL',
   });
+  const APPOINTMENT_SELECT =
+    'id,customer_id,pet_id,appointment_date,arrival_time,shift,bath,tele,grooming_type,charged_amount,notes,status,checked_in_at,checked_out_at,customer:customers!grooming_appointments_customer_id_fkey(id,full_name,phone),pet:pets!grooming_appointments_pet_id_fkey(id,name,breed)';
 
   const state = {
     appointments: [],
@@ -34,7 +36,7 @@
   // a página hidrata o estado na hora e revalida no Supabase em segundo plano.
   // A versão protege contra formatos antigos quando o normalize mudar.
   const CACHE_KEYS = {
-    appointments: 'colina:v2:appointments',
+    appointments: 'colina:v4:appointments',
     customers: 'colina:v1:customers',
   };
 
@@ -215,6 +217,71 @@
     return amount === null ? '' : CURRENCY_FORMATTER.format(amount);
   }
 
+  function normalizeTimestamp(value) {
+    if (!value) {
+      return '';
+    }
+
+    const timestamp = new Date(value);
+    return Number.isNaN(timestamp.getTime()) ? '' : timestamp.toISOString();
+  }
+
+  function formatTimeLabel(value) {
+    if (!value) {
+      return '';
+    }
+
+    const timestamp = new Date(value);
+    if (Number.isNaN(timestamp.getTime())) {
+      return '';
+    }
+
+    return timestamp.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  function getAttendanceState(appointment) {
+    if (appointment && appointment.checkedOutAt) {
+      return 'completed';
+    }
+
+    if (appointment && appointment.checkedInAt) {
+      return 'present';
+    }
+
+    return 'scheduled';
+  }
+
+  function getAttendanceLabel(state) {
+    if (state === 'present') {
+      return 'Presente';
+    }
+
+    if (state === 'completed') {
+      return 'Finalizado';
+    }
+
+    return 'Agendado';
+  }
+
+  function getAttendanceSummaryLabel(appointment) {
+    const state = getAttendanceState(appointment);
+
+    if (state === 'present') {
+      const timeLabel = formatTimeLabel(appointment.checkedInAt);
+      return timeLabel ? `Chegou às ${timeLabel}` : 'Chegou';
+    }
+
+    if (state === 'completed') {
+      const timeLabel = formatTimeLabel(appointment.checkedOutAt);
+      return timeLabel ? `Saiu às ${timeLabel}` : 'Finalizado';
+    }
+
+    return 'Aguardando chegada';
+  }
+
   function compareAppointments(left, right) {
     return (
       left.date.localeCompare(right.date) ||
@@ -303,7 +370,7 @@
   }
 
   function normalizeAppointment(row) {
-    return {
+    const appointment = {
       id: row.id,
       date: row.appointment_date,
       arrivalTime: String(row.arrival_time || '').slice(0, 5),
@@ -319,14 +386,20 @@
       groomingType: row.grooming_type || '',
       chargedAmount: normalizeChargedAmount(row.charged_amount),
       notes: row.notes || '',
+      checkedInAt: normalizeTimestamp(row.checked_in_at),
+      checkedOutAt: normalizeTimestamp(row.checked_out_at),
       status: row.status || 'scheduled',
     };
+
+    appointment.attendanceState = getAttendanceState(appointment);
+    appointment.attendanceLabel = getAttendanceLabel(appointment.attendanceState);
+    appointment.attendanceSummary = getAttendanceSummaryLabel(appointment);
+    return appointment;
   }
 
   async function fetchAppointments() {
     const url = buildUrl('grooming_appointments', {
-      select:
-        'id,customer_id,pet_id,appointment_date,arrival_time,shift,bath,tele,grooming_type,charged_amount,notes,status,customer:customers!grooming_appointments_customer_id_fkey(id,full_name,phone),pet:pets!grooming_appointments_pet_id_fkey(id,name,breed)',
+      select: APPOINTMENT_SELECT,
       order: 'appointment_date.asc,arrival_time.asc',
     });
 
@@ -517,6 +590,8 @@
     let bathCount = 0;
     let morningCount = 0;
     let afternoonCount = 0;
+    let presentCount = 0;
+    let completedCount = 0;
 
     appointments.forEach((appointment) => {
       if (appointment.bath) {
@@ -532,6 +607,12 @@
       } else {
         afternoonCount += 1;
       }
+
+      if (getAttendanceState(appointment) === 'present') {
+        presentCount += 1;
+      } else if (getAttendanceState(appointment) === 'completed') {
+        completedCount += 1;
+      }
     });
 
     return {
@@ -540,6 +621,8 @@
       groomingTotal: groomingCounts.higienica + groomingCounts.tesoura + groomingCounts.maquina,
       morningCount,
       afternoonCount,
+      presentCount,
+      completedCount,
       groomingCounts,
     };
   }
@@ -1164,14 +1247,135 @@
       throw new Error('Selecione um agendamento para excluir.');
     }
 
-    const deleted = await deleteRows('grooming_appointments', { id: `eq.${id}` });
+    const existing = await maybeSingle('grooming_appointments', {
+      select: APPOINTMENT_SELECT,
+      id: `eq.${id}`,
+    });
 
-    if (!deleted.length) {
+    if (!existing) {
       throw new Error('Não foi possível encontrar o agendamento para excluir.');
     }
 
+    await deleteRows('grooming_appointments', { id: `eq.${id}` });
+    const remaining = await maybeSingle('grooming_appointments', {
+      select: 'id',
+      id: `eq.${id}`,
+    });
+
+    if (remaining) {
+      throw new Error('A exclusão foi bloqueada no Supabase. Aplique a migration de DELETE da agenda e tente novamente.');
+    }
+
     await refreshAppointments();
-    return normalizeAppointment(deleted[0]);
+    return normalizeAppointment(existing);
+  }
+
+  async function updateAppointmentAttendance(appointmentId, values) {
+    await ready();
+
+    const id = normalizeText(appointmentId);
+    if (!id) {
+      throw new Error('Selecione um agendamento para atualizar a presença.');
+    }
+
+    const appointment = state.appointments.find((item) => item.id === id);
+    if (!appointment) {
+      throw new Error('Não foi possível encontrar o agendamento.');
+    }
+
+    if (appointment.status === 'cancelled') {
+      throw new Error('Este agendamento está cancelado e não pode receber chegada ou saída.');
+    }
+
+    const updated = await updateRows('grooming_appointments', { id: `eq.${id}` }, values);
+
+    if (!updated.length) {
+      throw new Error('Não foi possível atualizar o status de chegada/saída.');
+    }
+
+    await refreshAppointments();
+    return state.appointments.find((item) => item.id === id) || null;
+  }
+
+  async function markAppointmentArrival(appointmentId) {
+    const appointment = getAppointmentById(appointmentId);
+
+    if (!appointment) {
+      throw new Error('Não foi possível encontrar o agendamento.');
+    }
+
+    if (appointment.checkedOutAt) {
+      throw new Error('Este atendimento já foi finalizado. Desfaça a saída antes de marcar nova chegada.');
+    }
+
+    if (appointment.checkedInAt) {
+      return appointment;
+    }
+
+    return updateAppointmentAttendance(appointmentId, {
+      checked_in_at: new Date().toISOString(),
+      checked_out_at: null,
+      status: 'scheduled',
+    });
+  }
+
+  async function markAppointmentDeparture(appointmentId) {
+    const appointment = getAppointmentById(appointmentId);
+
+    if (!appointment) {
+      throw new Error('Não foi possível encontrar o agendamento.');
+    }
+
+    if (!appointment.checkedInAt) {
+      throw new Error('Marque a chegada antes de registrar a saída.');
+    }
+
+    if (appointment.checkedOutAt) {
+      return appointment;
+    }
+
+    return updateAppointmentAttendance(appointmentId, {
+      checked_out_at: new Date().toISOString(),
+      status: 'completed',
+    });
+  }
+
+  async function undoAppointmentArrival(appointmentId) {
+    const appointment = getAppointmentById(appointmentId);
+
+    if (!appointment) {
+      throw new Error('Não foi possível encontrar o agendamento.');
+    }
+
+    if (appointment.checkedOutAt) {
+      throw new Error('Desfaça a saída antes de limpar a chegada.');
+    }
+
+    if (!appointment.checkedInAt) {
+      return appointment;
+    }
+
+    return updateAppointmentAttendance(appointmentId, {
+      checked_in_at: null,
+      status: 'scheduled',
+    });
+  }
+
+  async function undoAppointmentDeparture(appointmentId) {
+    const appointment = getAppointmentById(appointmentId);
+
+    if (!appointment) {
+      throw new Error('Não foi possível encontrar o agendamento.');
+    }
+
+    if (!appointment.checkedOutAt) {
+      return appointment;
+    }
+
+    return updateAppointmentAttendance(appointmentId, {
+      checked_out_at: null,
+      status: 'scheduled',
+    });
   }
 
   function buildDayWindow(centerDateKey, radius) {
@@ -1216,10 +1420,18 @@
     getFrequentPets,
     getCustomerFrequencyRows,
     getCustomerFrequencySummary,
+    getAttendanceState,
+    getAttendanceLabel,
+    getAttendanceSummaryLabel,
+    formatTimeLabel,
     hasConflict,
     addAppointment,
     updateAppointment,
     deleteAppointment,
+    markAppointmentArrival,
+    markAppointmentDeparture,
+    undoAppointmentArrival,
+    undoAppointmentDeparture,
     addCustomerRegistration,
     saveCustomerRegistration,
     saveCustomerWithPets,

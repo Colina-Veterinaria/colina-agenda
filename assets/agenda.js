@@ -11,6 +11,9 @@
   let editPetPickerOpen = false;
   let editSubmitting = false;
   let actionsAppointmentId = '';
+  let deletingAppointmentId = '';
+  let deleteSubmitting = false;
+  let attendanceSubmittingId = '';
 
   const ranges = {
     manha: { startHour: 7, endHour: 12, label: '07h às 12h' },
@@ -23,6 +26,10 @@
 
   function isEditModalOpen() {
     return qs('appointmentEditOverlay').classList.contains('is-open');
+  }
+
+  function isDeleteModalOpen() {
+    return qs('appointmentDeleteOverlay').classList.contains('is-open');
   }
 
   function getEditingCustomer() {
@@ -164,9 +171,20 @@
         const { appointment } = row;
         const groomingLabel = api.getGroomingLabel(appointment.groomingType);
         const chargedAmountLabel = api.formatCurrency(appointment.chargedAmount);
+        const attendanceState = api.getAttendanceState(appointment);
+        const attendanceLabel = api.getAttendanceLabel(attendanceState);
+        const attendanceSummary = api.getAttendanceSummaryLabel(appointment);
+        const notePreview = appointment.notes ? e(appointment.notes) : '-';
+        const noteTitle = appointment.notes ? ` title="${e(appointment.notes)}"` : '';
+        const isAttendanceSubmitting = attendanceSubmittingId === appointment.id;
+        const actionButtons = [
+          ...getAttendanceActionConfig(appointment),
+          { action: 'edit-appointment', label: 'Editar', tone: 'is-edit', icon: '✎' },
+          { action: 'delete-appointment', label: 'Excluir', tone: 'is-danger', icon: '🗑' },
+        ];
         return `
-          <tr class="agenda-row${row.hourBreak ? ' row-hour-break' : ''}${actionsAppointmentId === appointment.id ? ' is-actions-open' : ''}" data-appointment-row data-appointment-id="${e(appointment.id)}">
-            <td class="cell-time"><span class="row-visual">${appointment.arrivalTime}</span></td>
+          <tr class="agenda-row is-attendance-${attendanceState}${row.hourBreak ? ' row-hour-break' : ''}${actionsAppointmentId === appointment.id ? ' is-actions-open' : ''}" data-appointment-row data-appointment-id="${e(appointment.id)}">
+            <td class="cell-time" aria-label="${e(attendanceLabel)}. ${e(attendanceSummary)}" title="${e(attendanceSummary)}"><span class="row-visual attendance-time">${appointment.arrivalTime}</span></td>
             <td><span class="row-visual">${e(appointment.phone)}</span></td>
             <td class="cell-client">
               <div class="row-visual">
@@ -185,26 +203,10 @@
             <td><span class="row-visual money-pill ${chargedAmountLabel ? '' : 'is-empty'}">${chargedAmountLabel || 'Não informado'}</span></td>
             <td class="cell-note">
               <div class="cell-note-layout">
-                <span class="row-visual cell-note-copy">${e(appointment.notes) || 'Sem observações.'}</span>
+                <span class="row-visual cell-note-copy"${noteTitle}>${notePreview}</span>
                 <div class="row-inline-actions" aria-label="Ações do agendamento">
-                  <button
-                    type="button"
-                    class="table-inline-action is-edit"
-                    data-action="edit-appointment"
-                    data-appointment-id="${e(appointment.id)}"
-                    aria-label="Editar agendamento de ${e(appointment.petName)}"
-                  >
-                    ✎
-                  </button>
-                  <button
-                    type="button"
-                    class="table-inline-action is-danger"
-                    data-action="delete-appointment"
-                    data-appointment-id="${e(appointment.id)}"
-                    aria-label="Excluir agendamento de ${e(appointment.petName)}"
-                  >
-                    🗑
-                  </button>
+                  ${actionButtons.map((item) => buildInlineActionButton(appointment, item, isAttendanceSubmitting)).join('')}
+                  ${isAttendanceSubmitting ? '<span class="inline-actions-status">Salvando...</span>' : ''}
                 </div>
               </div>
             </td>
@@ -218,6 +220,8 @@
     const appointments = api.getAppointmentsByDateAndShift(selectedDateKey, selectedShift);
     const bathCount = appointments.filter((appointment) => appointment.bath).length;
     const groomingCount = appointments.filter((appointment) => appointment.groomingType).length;
+    const presentCount = appointments.filter((appointment) => api.getAttendanceState(appointment) === 'present').length;
+    const completedCount = appointments.filter((appointment) => api.getAttendanceState(appointment) === 'completed').length;
 
     qs('agendaTitle').textContent = api.formatLongDate(selectedDateKey);
     qs('agendaShiftBadge').textContent = `${api.getShiftLabel(selectedShift)} · ${ranges[selectedShift].label}`;
@@ -225,6 +229,8 @@
       <span><strong>${appointments.length}</strong> agendamento${appointments.length === 1 ? '' : 's'} neste turno</span>
       <span><strong>${bathCount}</strong> com banho</span>
       <span><strong>${groomingCount}</strong> com tosa</span>
+      <span><strong>${presentCount}</strong> presente${presentCount === 1 ? '' : 's'} agora</span>
+      <span><strong>${completedCount}</strong> finalizado${completedCount === 1 ? '' : 's'}</span>
     `;
   }
 
@@ -263,8 +269,20 @@
     feedback.textContent = message;
   }
 
+  function showDeleteFeedback(message, mode) {
+    const feedback = qs('appointmentDeleteFeedback');
+    feedback.className = `feedback is-visible ${mode === 'error' ? 'is-error' : 'is-success'}`;
+    feedback.textContent = message;
+  }
+
   function clearEditFeedback() {
     const feedback = qs('appointmentEditFeedback');
+    feedback.className = 'feedback';
+    feedback.textContent = '';
+  }
+
+  function clearDeleteFeedback() {
+    const feedback = qs('appointmentDeleteFeedback');
     feedback.className = 'feedback';
     feedback.textContent = '';
   }
@@ -278,6 +296,58 @@
 
     button.disabled = nextValue;
     button.textContent = nextValue ? 'Salvando...' : 'Salvar alterações';
+  }
+
+  function setDeleteSubmitting(nextValue) {
+    deleteSubmitting = nextValue;
+    const confirmButton = qs('appointmentDeleteConfirm');
+    const cancelButton = qs('appointmentDeleteCancel');
+
+    if (confirmButton) {
+      confirmButton.disabled = nextValue;
+      confirmButton.textContent = nextValue ? 'Excluindo...' : 'Excluir';
+    }
+
+    if (cancelButton) {
+      cancelButton.disabled = nextValue;
+    }
+  }
+
+  function getAttendanceActionConfig(appointment) {
+    const state = api.getAttendanceState(appointment);
+
+    if (state === 'present') {
+      return [
+        { action: 'check-out', label: 'Saiu', tone: 'is-departure', icon: '✓' },
+        { action: 'undo-check-in', label: 'Desfazer chegada', tone: 'is-secondary', icon: '↺' },
+      ];
+    }
+
+    if (state === 'completed') {
+      return [
+        { action: 'undo-check-out', label: 'Desfazer saída', tone: 'is-secondary', icon: '↺' },
+      ];
+    }
+
+    return [
+      { action: 'check-in', label: 'Chegou', tone: 'is-arrival', icon: '●' },
+    ];
+  }
+
+  function buildInlineActionButton(appointment, item, disabled) {
+    return `
+      <button
+        type="button"
+        class="table-inline-action ${item.tone}"
+        data-action="${item.action}"
+        data-appointment-id="${e(appointment.id)}"
+        aria-label="${item.label} para ${e(appointment.petName)}"
+        ${disabled ? 'disabled' : ''}
+      >
+        <span class="table-inline-action-icon" aria-hidden="true">${item.icon}</span>
+        <span>${item.label}</span>
+      </button>
+    `;
   }
 
   function clearEditSelection() {
@@ -459,6 +529,34 @@
     qs('editPetPickerField').hidden = true;
   }
 
+  function openDeleteModal(appointmentId) {
+    const appointment = api.getAppointmentById(appointmentId);
+    if (!appointment) {
+      return;
+    }
+
+    actionsAppointmentId = '';
+    deletingAppointmentId = appointment.id;
+    clearDeleteFeedback();
+    setDeleteSubmitting(false);
+    qs('appointmentDeleteMessage').textContent = `Tem certeza que deseja excluir atendimento de ${appointment.clientName}?`;
+    qs('appointmentDeleteOverlay').classList.add('is-open');
+    qs('appointmentDeleteOverlay').setAttribute('aria-hidden', 'false');
+  }
+
+  function closeDeleteModal(force) {
+    if (deleteSubmitting && !force) {
+      return;
+    }
+
+    qs('appointmentDeleteOverlay').classList.remove('is-open');
+    qs('appointmentDeleteOverlay').setAttribute('aria-hidden', 'true');
+    qs('appointmentDeleteMessage').textContent = 'Tem certeza que deseja excluir este atendimento?';
+    deletingAppointmentId = '';
+    clearDeleteFeedback();
+    setDeleteSubmitting(false);
+  }
+
   async function handleEditSubmit(event) {
     event.preventDefault();
     if (editSubmitting) {
@@ -518,25 +616,54 @@
     }
   }
 
-  async function handleDeleteAppointment(appointmentId) {
-    const appointment = api.getAppointmentById(appointmentId);
-    if (!appointment) {
+  async function handleDeleteAppointment() {
+    if (!deletingAppointmentId || deleteSubmitting) {
       return;
     }
 
-    const confirmed = window.confirm(`Excluir o agendamento de ${appointment.petName} às ${appointment.arrivalTime}?`);
-    if (!confirmed) {
-      return;
-    }
+    clearDeleteFeedback();
+    setDeleteSubmitting(true);
 
     try {
-      await api.deleteAppointment(appointmentId);
-      if (editingAppointmentId === appointmentId) {
+      await api.deleteAppointment(deletingAppointmentId);
+      if (editingAppointmentId === deletingAppointmentId) {
         closeEditModal();
       }
+      setDeleteSubmitting(false);
+      closeDeleteModal(true);
       render();
     } catch (error) {
-      window.alert(error && error.message ? error.message : 'Não foi possível excluir o agendamento.');
+      showDeleteFeedback(error && error.message ? error.message : 'Não foi possível excluir o agendamento.', 'error');
+      setDeleteSubmitting(false);
+    }
+  }
+
+  async function handleAttendanceAction(appointmentId, action) {
+    if (!appointmentId || attendanceSubmittingId) {
+      return;
+    }
+
+    attendanceSubmittingId = appointmentId;
+    actionsAppointmentId = appointmentId;
+    renderTable();
+
+    try {
+      if (action === 'check-in') {
+        await api.markAppointmentArrival(appointmentId);
+      } else if (action === 'check-out') {
+        await api.markAppointmentDeparture(appointmentId);
+      } else if (action === 'undo-check-in') {
+        await api.undoAppointmentArrival(appointmentId);
+      } else if (action === 'undo-check-out') {
+        await api.undoAppointmentDeparture(appointmentId);
+      }
+    } catch (error) {
+      window.alert(error && error.message ? error.message : 'Não foi possível atualizar a chegada ou a saída.');
+    } finally {
+      if (attendanceSubmittingId === appointmentId) {
+        attendanceSubmittingId = '';
+      }
+      render();
     }
   }
 
@@ -580,8 +707,12 @@
         }
 
         if (action === 'delete-appointment') {
-          actionsAppointmentId = '';
-          handleDeleteAppointment(appointmentId);
+          openDeleteModal(appointmentId);
+          return;
+        }
+
+        if (action === 'check-in' || action === 'check-out' || action === 'undo-check-in' || action === 'undo-check-out') {
+          handleAttendanceAction(appointmentId, action);
           return;
         }
       }
@@ -600,6 +731,13 @@
     qs('appointmentEditOverlay').addEventListener('click', function (event) {
       if (event.target === this) {
         closeEditModal();
+      }
+    });
+    qs('appointmentDeleteCancel').addEventListener('click', closeDeleteModal);
+    qs('appointmentDeleteConfirm').addEventListener('click', handleDeleteAppointment);
+    qs('appointmentDeleteOverlay').addEventListener('click', function (event) {
+      if (event.target === this) {
+        closeDeleteModal();
       }
     });
 
@@ -660,9 +798,13 @@
     });
 
     window.addEventListener('colina:appointments-changed', function () {
+      attendanceSubmittingId = '';
       render();
       if (editingAppointmentId && !api.getAppointmentById(editingAppointmentId)) {
         closeEditModal();
+      }
+      if (deletingAppointmentId && !api.getAppointmentById(deletingAppointmentId)) {
+        closeDeleteModal(true);
       }
     });
 
@@ -681,6 +823,11 @@
     });
 
     document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && isDeleteModalOpen()) {
+        closeDeleteModal();
+        return;
+      }
+
       if (event.key === 'Escape' && isEditModalOpen()) {
         closeEditModal();
         return;
@@ -693,7 +840,7 @@
     });
 
     document.addEventListener('click', function (event) {
-      if (event.target.closest('#agendaTableBody') || event.target.closest('#appointmentEditOverlay')) {
+      if (event.target.closest('#agendaTableBody') || event.target.closest('#appointmentEditOverlay') || event.target.closest('#appointmentDeleteOverlay')) {
         return;
       }
 
