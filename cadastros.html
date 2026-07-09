@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Colina Veterinária | Cadastros</title>
-  <link rel="stylesheet" href="assets/styles.css?v=20260709">
+  <link rel="stylesheet" href="assets/styles.css?v=20260709b">
 </head>
 <body class="registry-page">
   <div class="app-shell">
@@ -72,13 +72,32 @@
       </div>
     </div>
 
+    <div class="modal-overlay" id="customerDeleteOverlay" aria-hidden="true">
+      <div class="modal-dialog appointment-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="customerDeleteTitle">
+        <div class="modal-body modal-body-compact">
+          <div class="appointment-delete-copy">
+            <p class="eyebrow">Confirmar exclusão</p>
+            <h2 class="section-title" id="customerDeleteTitle">Excluir cadastro</h2>
+            <p class="modal-copy" id="customerDeleteMessage">Tem certeza que deseja excluir este cadastro?</p>
+          </div>
+
+          <div class="submit-row submit-row-compact">
+            <button type="button" class="secondary-button" id="customerDeleteCancel">Cancelar</button>
+            <button type="button" class="primary-button danger-button" id="customerDeleteConfirm">Excluir</button>
+          </div>
+
+          <div class="feedback" id="customerDeleteFeedback" role="status" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+
     <footer class="app-footer">
       <div class="status-online">Conectado</div>
       <div id="footerUpdated"></div>
     </footer>
   </div>
 
-  <script src="assets/data.js?v=20260709"></script>
-  <script src="assets/cadastros.js?v=20260709"></script>
+  <script src="assets/data.js?v=20260709b"></script>
+  <script src="assets/cadastros.js?v=20260709b"></script>
 </body>
 </html>

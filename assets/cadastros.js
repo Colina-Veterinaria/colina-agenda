@@ -244,25 +244,68 @@
     renderRegistryList();
   }
 
+  function isDeleteModalOpen() {
+    return qs('customerDeleteOverlay').classList.contains('is-open');
+  }
+
+  function showDeleteFeedback(message, mode) {
+    const feedback = qs('customerDeleteFeedback');
+    if (!feedback) return;
+    feedback.className = `feedback is-visible ${mode === 'error' ? 'is-error' : 'is-success'}`;
+    feedback.textContent = message;
+  }
+
+  function clearDeleteFeedback() {
+    const feedback = qs('customerDeleteFeedback');
+    if (!feedback) return;
+    feedback.className = 'feedback';
+    feedback.textContent = '';
+  }
+
+  function setDeleteSubmitting(value) {
+    deleting = value;
+    const confirmBtn = qs('customerDeleteConfirm');
+    const cancelBtn = qs('customerDeleteCancel');
+    if (confirmBtn) {
+      confirmBtn.disabled = value;
+      confirmBtn.textContent = value ? 'Excluindo...' : 'Excluir';
+    }
+    if (cancelBtn) cancelBtn.disabled = value;
+  }
+
+  function openDeleteModal() {
+    if (!selectedCustomerId) return;
+    const customer = getSelectedCustomer();
+    const name = customer ? customer.fullName : 'este cliente';
+    qs('customerDeleteMessage').textContent = `Tem certeza que deseja excluir o cadastro de ${name}? Esta ação não pode ser desfeita.`;
+    clearDeleteFeedback();
+    setDeleteSubmitting(false);
+    qs('customerDeleteOverlay').classList.add('is-open');
+    qs('customerDeleteOverlay').setAttribute('aria-hidden', 'false');
+  }
+
+  function closeDeleteModal(force) {
+    if (deleting && !force) return;
+    qs('customerDeleteOverlay').classList.remove('is-open');
+    qs('customerDeleteOverlay').setAttribute('aria-hidden', 'true');
+    qs('customerDeleteMessage').textContent = 'Tem certeza que deseja excluir este cadastro?';
+    clearDeleteFeedback();
+    setDeleteSubmitting(false);
+  }
+
   async function handleDeleteCustomer() {
     if (deleting || !selectedCustomerId) return;
 
-    const customer = getSelectedCustomer();
-    const name = customer ? customer.fullName : 'este cliente';
-
-    if (!window.confirm(`Excluir o cadastro de ${name}? Esta ação não pode ser desfeita.`)) return;
-
-    deleting = true;
-    const deleteBtn = qs('detailPanel').querySelector('[data-action="delete-customer"]');
-    if (deleteBtn) deleteBtn.disabled = true;
+    clearDeleteFeedback();
+    setDeleteSubmitting(true);
 
     try {
       await api.deleteCustomer(selectedCustomerId);
+      closeDeleteModal(true);
       closeModal();
     } catch (error) {
-      deleting = false;
-      if (deleteBtn) deleteBtn.disabled = false;
-      showFeedback(error && error.message ? error.message : 'Não foi possível excluir o cadastro.', 'error');
+      setDeleteSubmitting(false);
+      showDeleteFeedback(error && error.message ? error.message : 'Não foi possível excluir o cadastro.', 'error');
     }
   }
 
@@ -378,7 +421,7 @@
       }
 
       if (event.target.closest('[data-action="delete-customer"]')) {
-        handleDeleteCustomer();
+        openDeleteModal();
         return;
       }
 
@@ -407,9 +450,19 @@
       if (event.target === this) closeModal();
     });
 
+    qs('customerDeleteConfirm').addEventListener('click', handleDeleteCustomer);
+    qs('customerDeleteCancel').addEventListener('click', function () { closeDeleteModal(); });
+    qs('customerDeleteOverlay').addEventListener('click', function (event) {
+      if (event.target === this) closeDeleteModal();
+    });
+
     document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape' && qs('modalOverlay').classList.contains('is-open')) {
-        closeModal();
+      if (event.key === 'Escape') {
+        if (isDeleteModalOpen()) {
+          closeDeleteModal();
+        } else if (qs('modalOverlay').classList.contains('is-open')) {
+          closeModal();
+        }
       }
     });
 

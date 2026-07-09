@@ -1162,8 +1162,19 @@
       throw new Error('Cliente não encontrado.');
     }
 
+    const existing = await maybeSingle('customers', { select: 'id', id: `eq.${customerId}` });
+    if (!existing) {
+      throw new Error('Não foi possível encontrar o cliente para excluir.');
+    }
+
     await deleteRows('pets', { customer_id: `eq.${customerId}` });
     await deleteRows('customers', { id: `eq.${customerId}` });
+
+    const remaining = await maybeSingle('customers', { select: 'id', id: `eq.${customerId}` });
+    if (remaining) {
+      throw new Error('A exclusão foi bloqueada pelo Supabase. Verifique as permissões de DELETE na tabela customers e tente novamente.');
+    }
+
     await refreshCustomers();
   }
 
