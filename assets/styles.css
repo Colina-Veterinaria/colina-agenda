@@ -1553,6 +1553,42 @@ button {
   box-shadow: none;
 }
 
+.panel-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+  color: var(--text-muted);
+}
+
+.icon-button:hover {
+  background: rgba(111, 74, 45, 0.08);
+  color: var(--brown-strong);
+}
+
+.icon-button-danger:hover {
+  background: rgba(200, 40, 40, 0.08);
+  color: #c82828;
+  border-color: rgba(200, 40, 40, 0.15);
+}
+
+.icon-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .secondary-button {
   padding: 13px 18px;
   border-radius: 16px;

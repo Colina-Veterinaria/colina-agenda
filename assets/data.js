@@ -1157,6 +1157,16 @@
     };
   }
 
+  async function deleteCustomer(customerId) {
+    if (!customerId) {
+      throw new Error('Cliente não encontrado.');
+    }
+
+    await deleteRows('pets', { customer_id: `eq.${customerId}` });
+    await deleteRows('customers', { id: `eq.${customerId}` });
+    await refreshCustomers();
+  }
+
   async function addAppointment(input) {
     await ready();
 
@@ -1435,6 +1445,7 @@
     addCustomerRegistration,
     saveCustomerRegistration,
     saveCustomerWithPets,
+    deleteCustomer,
     buildDayWindow,
     toDateKey,
     fromDateKey,

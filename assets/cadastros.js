@@ -5,6 +5,7 @@
   let searchTerm = '';
   let selectedCustomerId = '';
   let submitting = false;
+  let deleting = false;
   let nextRowId = 1;
   let draft = { fullName: '', phone: '' };
   let petRows = [];
@@ -116,7 +117,18 @@
     qs('detailPanel').innerHTML = `
       <div class="panel-heading panel-heading-compact panel-heading-inline">
         <h2 class="section-title">${e(title)}</h2>
-        ${isNew ? '' : `<span class="registry-card-count">${petCount} pet${petCount === 1 ? '' : 's'}</span>`}
+        <div class="panel-heading-actions">
+          ${isNew ? '' : `<span class="registry-card-count">${petCount} pet${petCount === 1 ? '' : 's'}</span>`}
+          ${isNew ? '' : `<button type="button" class="icon-button icon-button-danger" data-action="delete-customer" title="Excluir cadastro">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+              <path d="M10 11v6"></path>
+              <path d="M14 11v6"></path>
+              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+            </svg>
+          </button>`}
+        </div>
       </div>
 
       <form id="detailForm">
@@ -227,8 +239,31 @@
     qs('modalOverlay').classList.remove('is-open');
     selectedCustomerId = '';
     submitting = false;
+    deleting = false;
     renderSummary();
     renderRegistryList();
+  }
+
+  async function handleDeleteCustomer() {
+    if (deleting || !selectedCustomerId) return;
+
+    const customer = getSelectedCustomer();
+    const name = customer ? customer.fullName : 'este cliente';
+
+    if (!window.confirm(`Excluir o cadastro de ${name}? Esta ação não pode ser desfeita.`)) return;
+
+    deleting = true;
+    const deleteBtn = qs('detailPanel').querySelector('[data-action="delete-customer"]');
+    if (deleteBtn) deleteBtn.disabled = true;
+
+    try {
+      await api.deleteCustomer(selectedCustomerId);
+      closeModal();
+    } catch (error) {
+      deleting = false;
+      if (deleteBtn) deleteBtn.disabled = false;
+      showFeedback(error && error.message ? error.message : 'Não foi possível excluir o cadastro.', 'error');
+    }
   }
 
   function setSubmitting(value) {
@@ -339,6 +374,11 @@
     panel.addEventListener('click', function (event) {
       if (event.target.closest('[data-action="cancel"]')) {
         closeModal();
+        return;
+      }
+
+      if (event.target.closest('[data-action="delete-customer"]')) {
+        handleDeleteCustomer();
         return;
       }
 
