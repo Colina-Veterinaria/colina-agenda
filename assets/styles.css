@@ -2016,6 +2016,91 @@ button {
 }
 
 /* ===== Frequência de clientes ===== */
+.frequency-summary-panel {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.frequency-summary-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 210px;
+}
+
+.frequency-summary-heading span {
+  font-size: 0.78rem;
+  color: var(--text-soft);
+}
+
+.frequency-period-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.frequency-period-presets {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(36, 22, 15, 0.025);
+  border: 1px solid rgba(111, 74, 45, 0.08);
+}
+
+.period-filter-button {
+  min-height: 30px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  color: var(--text-soft);
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.period-filter-button:hover {
+  background: rgba(111, 74, 45, 0.045);
+  color: var(--brown-strong);
+}
+
+.period-filter-button.is-active {
+  background: rgba(202, 162, 77, 0.1);
+  color: var(--gold-muted);
+}
+
+.frequency-custom-period {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.frequency-custom-period[hidden] {
+  display: none;
+}
+
+.frequency-custom-period label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(111, 74, 45, 0.12);
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.frequency-custom-period input[type='date'] {
+  min-height: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--text-main);
+  outline: none;
+}
+
 .activity-toolbar {
   flex-wrap: wrap;
   align-items: center;
@@ -2162,6 +2247,27 @@ button {
   color: var(--brown-strong);
 }
 
+.frequency-client-button {
+  display: block;
+  width: 100%;
+  min-width: 220px;
+  padding: 4px 0;
+  border-radius: 8px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.frequency-client-button:hover strong,
+.frequency-client-button:focus strong {
+  color: var(--gold-muted);
+}
+
+.frequency-client-button:focus {
+  outline: 3px solid rgba(202, 162, 77, 0.22);
+  outline-offset: 3px;
+}
+
 .frequency-client span,
 .frequency-last span {
   display: block;
@@ -2185,6 +2291,191 @@ button {
 .frequency-number--primary {
   background: rgba(202, 162, 77, 0.18);
   color: var(--gold-muted);
+}
+
+.customer-frequency-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(17, 10, 6, 0.18);
+}
+
+.customer-frequency-drawer[hidden] {
+  display: none;
+}
+
+.customer-frequency-drawer-panel {
+  width: min(560px, 100vw);
+  height: 100%;
+  overflow-y: auto;
+  padding: 18px;
+  background: var(--panel-soft);
+  color: var(--text-main);
+  border-left: 1px solid rgba(220, 207, 182, 0.92);
+  box-shadow: -22px 0 54px rgba(0, 0, 0, 0.24);
+}
+
+.customer-frequency-drawer-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.customer-frequency-drawer-panel::-webkit-scrollbar-thumb {
+  background: rgba(143, 118, 74, 0.28);
+  border-radius: 999px;
+}
+
+.frequency-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.frequency-detail-title span {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+}
+
+.frequency-detail-title h2 {
+  margin-top: 4px;
+  font-size: 1.28rem;
+  line-height: 1.1;
+  color: var(--brown-strong);
+}
+
+.frequency-detail-title p {
+  margin-top: 5px;
+  color: var(--text-soft);
+  font-size: 0.86rem;
+}
+
+.frequency-drawer-close {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-color: rgba(111, 74, 45, 0.12);
+  color: var(--brown-strong);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.frequency-detail-summary {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.frequency-detail-subhead {
+  margin-top: 18px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.frequency-detail-subhead strong {
+  color: var(--brown-strong);
+}
+
+.frequency-detail-subhead span {
+  font-size: 0.8rem;
+  color: var(--text-soft);
+}
+
+.frequency-history-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.frequency-history-item {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(111, 74, 45, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.frequency-history-date {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.frequency-history-date strong {
+  color: var(--brown-strong);
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+
+.frequency-history-date span {
+  color: var(--gold-muted);
+  font-weight: 800;
+  font-size: 0.78rem;
+}
+
+.frequency-history-body {
+  min-width: 0;
+}
+
+.frequency-history-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.frequency-history-main strong {
+  color: var(--brown-strong);
+}
+
+.frequency-history-main span {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+.frequency-history-meta {
+  margin-top: 7px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-soft);
+  font-size: 0.76rem;
+}
+
+.frequency-history-body p {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-soft);
+}
+
+.frequency-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(111, 74, 45, 0.08);
+  color: var(--brown-strong);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.frequency-muted {
+  color: var(--text-muted);
 }
 
 .metric-chip--ativo,
@@ -2438,8 +2729,24 @@ button {
 }
 
 @media (max-width: 720px) {
+  .frequency-summary-panel,
   .activity-toolbar {
     align-items: stretch;
+  }
+
+  .frequency-summary-heading,
+  .frequency-period-controls,
+  .frequency-period-presets {
+    width: 100%;
+  }
+
+  .frequency-period-presets {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .frequency-custom-period label {
+    flex: 1 1 160px;
   }
 
   .activity-toolbar-copy {
@@ -2458,6 +2765,30 @@ button {
 
   .sort-direction-button {
     flex: 0 0 44px;
+  }
+
+  .frequency-detail-header,
+  .frequency-detail-subhead {
+    align-items: flex-start;
+  }
+
+  .customer-frequency-drawer-panel {
+    width: 100vw;
+    padding: 14px;
+  }
+
+  .frequency-history-item {
+    grid-template-columns: 1fr;
+  }
+
+  .frequency-history-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .frequency-history-main span {
+    text-align: left;
   }
 }
 
