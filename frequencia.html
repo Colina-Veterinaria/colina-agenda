@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Colina Veterinária | Frequência</title>
-  <link rel="stylesheet" href="assets/styles.css?v=20260706">
+  <link rel="stylesheet" href="assets/styles.css?v=2026072803">
 </head>
 <body class="frequency-page">
   <div class="app-shell">
@@ -40,12 +40,33 @@
     </header>
 
     <main class="page-main">
-      <section class="summary-strip panel">
-        <h1 class="section-title">Frequência de clientes</h1>
+      <section class="summary-strip panel frequency-summary-panel">
+        <div class="frequency-summary-heading">
+          <h1 class="section-title">Frequência de clientes</h1>
+          <span id="periodMeta"></span>
+        </div>
+        <div class="frequency-period-controls" aria-label="Período de análise">
+          <div class="frequency-period-presets" role="group" aria-label="Filtros rápidos de período">
+            <button type="button" class="period-filter-button" data-period="all">Todos</button>
+            <button type="button" class="period-filter-button" data-period="7">Últimos 7 dias</button>
+            <button type="button" class="period-filter-button" data-period="30">Últimos 30 dias</button>
+            <button type="button" class="period-filter-button" data-period="custom">Personalizado</button>
+          </div>
+          <div class="frequency-custom-period" id="customPeriodFields" hidden>
+            <label>
+              <span>Início</span>
+              <input type="date" id="periodStart">
+            </label>
+            <label>
+              <span>Fim</span>
+              <input type="date" id="periodEnd">
+            </label>
+          </div>
+        </div>
         <div class="reception-summary" id="activitySummary"></div>
       </section>
 
-      <section class="form-panel panel">
+      <section class="form-panel panel" id="rankingPanel">
         <div class="panel-heading panel-heading-compact panel-heading-inline activity-toolbar">
           <div class="activity-toolbar-copy">
             <strong>Ranking por agendamentos</strong>
@@ -67,7 +88,14 @@
 
         <div class="activity-list" id="activityList"></div>
       </section>
+
     </main>
+
+    <section class="customer-frequency-drawer" id="customerDetailPanel" hidden aria-label="Histórico do cliente">
+      <div class="customer-frequency-drawer-panel">
+        <div id="customerDetailContent"></div>
+      </div>
+    </section>
 
     <footer class="app-footer">
       <div class="status-online">Conectado</div>
@@ -75,7 +103,7 @@
     </footer>
   </div>
 
-  <script src="assets/data.js?v=20260706"></script>
-  <script src="assets/frequencia.js?v=20260706"></script>
+  <script src="assets/data.js?v=2026072803"></script>
+  <script src="assets/frequencia.js?v=2026072803"></script>
 </body>
 </html>
