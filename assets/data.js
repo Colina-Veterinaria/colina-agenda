@@ -662,12 +662,34 @@
       }));
   }
 
-  function getCustomerFrequencyRows() {
+  function normalizeFrequencyRange(options) {
+    const source = options && options.range ? options.range : options || {};
+    return {
+      startDate: source.startDate || source.start || '',
+      endDate: source.endDate || source.end || '',
+    };
+  }
+
+  function appointmentMatchesFrequencyRange(appointment, options) {
+    const range = normalizeFrequencyRange(options);
+
+    if (range.startDate && appointment.date < range.startDate) {
+      return false;
+    }
+
+    if (range.endDate && appointment.date > range.endDate) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function getCustomerFrequencyRows(options) {
     const customerById = new Map(state.customers.map((customer) => [customer.id, customer]));
     const byCustomer = new Map();
 
     state.appointments.forEach((appointment) => {
-      if (!appointment.customerId) {
+      if (!appointment.customerId || !appointmentMatchesFrequencyRange(appointment, options)) {
         return;
       }
 
@@ -740,8 +762,8 @@
       });
   }
 
-  function getCustomerFrequencySummary() {
-    return getCustomerFrequencyRows().reduce(
+  function getCustomerFrequencySummary(options) {
+    return getCustomerFrequencyRows(options).reduce(
       (summary, row) => {
         summary.totalCustomers += 1;
         summary.totalAppointments += row.totalAppointments;
@@ -759,6 +781,16 @@
         tesouraCount: 0,
         maquinaCount: 0,
       }
+    );
+  }
+
+  function getCustomerFrequencyHistory(customerId, options) {
+    const normalizedCustomerId = normalizeText(customerId);
+
+    return clone(
+      state.appointments
+        .filter((appointment) => appointment.customerId === normalizedCustomerId && appointmentMatchesFrequencyRange(appointment, options))
+        .sort((left, right) => compareAppointmentMoments(right.date, right.arrivalTime, left.date, left.arrivalTime))
     );
   }
 
@@ -1441,6 +1473,7 @@
     getFrequentPets,
     getCustomerFrequencyRows,
     getCustomerFrequencySummary,
+    getCustomerFrequencyHistory,
     getAttendanceState,
     getAttendanceLabel,
     getAttendanceSummaryLabel,
