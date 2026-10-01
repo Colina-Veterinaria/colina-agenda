@@ -350,6 +350,49 @@
     return payload;
   }
 
+  // O PostgREST trunca respostas sem paginação no limite configurado no servidor
+  // (max_rows, 1000 por padrão). Para não perder agendamentos/clientes acima disso,
+  // paginamos explicitamente via header Range até a página vir incompleta.
+  async function fetchAllRows(table, searchParams) {
+    const pageSize = 1000;
+    let from = 0;
+    let allRows = [];
+
+    while (true) {
+      const url = buildUrl(table, searchParams);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          Range: `${from}-${from + pageSize - 1}`,
+        },
+      });
+
+      const text = await response.text();
+      const payload = text ? JSON.parse(text) : null;
+
+      if (!response.ok) {
+        const error = new Error(payload && payload.message ? payload.message : 'Erro ao acessar o Supabase.');
+        error.code = payload && payload.code ? payload.code : String(response.status);
+        error.details = payload;
+        throw error;
+      }
+
+      const rows = payload || [];
+      allRows = allRows.concat(rows);
+
+      if (rows.length < pageSize) {
+        break;
+      }
+
+      from += pageSize;
+    }
+
+    return allRows;
+  }
+
   function normalizePet(row) {
     return {
       id: row.id,
@@ -398,24 +441,19 @@
   }
 
   async function fetchAppointments() {
-    const url = buildUrl('grooming_appointments', {
+    const data = await fetchAllRows('grooming_appointments', {
       select: APPOINTMENT_SELECT,
       order: 'appointment_date.asc,arrival_time.asc',
     });
-
-    const data = await requestJson(url, { method: 'GET' });
     return (data || []).map(normalizeAppointment).sort(compareAppointments);
   }
 
   async function fetchCustomers() {
-    const url = buildUrl('customers', {
+    const data = await fetchAllRows('customers', {
       select: 'id,full_name,phone,notes,pets(id,name,breed,notes)',
       order: 'full_name.asc',
+      'pets.order': 'name.asc',
     });
-
-    url.searchParams.set('pets.order', 'name.asc');
-
-    const data = await requestJson(url, { method: 'GET' });
     return (data || []).map(normalizeCustomer).sort(compareCustomers);
   }
 
