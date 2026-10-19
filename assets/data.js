@@ -32,47 +32,88 @@
     lastError: null,
   };
 
-  // Cache em sessionStorage para troca de tela instantânea (stale-while-revalidate):
-  // a página hidrata o estado na hora e revalida no Supabase em segundo plano.
-  // A versão protege contra formatos antigos quando o normalize mudar.
-  const CACHE_KEYS = {
-    appointments: 'colina:v4:appointments',
-    customers: 'colina:v1:customers',
-  };
+  const CACHE_KEY = 'colina:scoped:v1';
+  const TTL = 60000;
+  const pending = new Map();
+  const dayPending = new Map();
+  let revision = 0;
+  let activeDate = '';
+  let cache = {};
+  try {
+    cache = JSON.parse(sessionStorage.getItem(CACHE_KEY) || '{}') || {};
+    // Libera o espaço ocupado pelos antigos snapshots de tabelas inteiras.
+    ['colina:v4:appointments', 'colina:v1:customers'].forEach((key) => sessionStorage.removeItem(key));
+  } catch (_) {}
 
-  function readCache(key) {
-    try {
-      const raw = sessionStorage.getItem(key);
-      const parsed = raw ? JSON.parse(raw) : null;
-      return Array.isArray(parsed) ? parsed : null;
-    } catch (error) {
-      return null;
-    }
+  function persistCache() {
+    const entries = Object.entries(cache).sort((a, b) => b[1].at - a[1].at).slice(0, 60);
+    cache = Object.fromEntries(entries);
+    try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(cache)); } catch (_) {}
   }
 
-  function writeCache(key, value) {
-    try {
-      sessionStorage.setItem(key, JSON.stringify(value));
-    } catch (error) {
-      // sessionStorage indisponível ou cheio: seguimos só com o estado em memória.
-    }
+  function fresh(key, ttl = TTL) {
+    return cache[key] && Date.now() - cache[key].at < ttl;
   }
 
-  // Hidrata o estado a partir do cache já no carregamento, antes de qualquer
-  // render, para que getAppointments/getCustomers tenham dados de imediato.
-  (function hydrateFromCache() {
-    const cachedAppointments = readCache(CACHE_KEYS.appointments);
-    if (cachedAppointments) {
-      state.appointments = cachedAppointments;
-      state.appointmentsInitialized = true;
-    }
+  function putCache(key, value) {
+    cache[key] = { at: Date.now(), value };
+    persistCache();
+    return value;
+  }
 
-    const cachedCustomers = readCache(CACHE_KEYS.customers);
-    if (cachedCustomers) {
-      state.customers = cachedCustomers;
-      state.registryInitialized = true;
+  async function cached(key, loader, ttl = TTL) {
+    if (fresh(key, ttl)) return clone(cache[key].value);
+    if (!pending.has(key)) {
+      const task = (async () => {
+        // A resposta iniciada antes de uma gravação não pode repor dados antigos.
+        let version, value;
+        do { version = revision; value = await loader(); } while (version !== revision);
+        return putCache(key, value);
+      })();
+      pending.set(key, task);
+      task.finally(() => pending.delete(key)).catch(() => {});
     }
-  })();
+    return clone(await pending.get(key));
+  }
+
+  function invalidateReports() {
+    revision += 1;
+    Object.keys(cache).forEach((key) => {
+      if (!key.startsWith('day:') && !key.startsWith('customer:')) delete cache[key];
+    });
+    persistCache();
+  }
+
+  function debounce(fn, delay = 300) {
+    let timer;
+    return function (...args) {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), delay);
+    };
+  }
+
+  function startVisibleSync(callback) {
+    const run = () => { if (!document.hidden) callback(); };
+    const timer = window.setInterval(run, TTL);
+    document.addEventListener('visibilitychange', run);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', run);
+    };
+  }
+
+  async function rpc(name, params) {
+    try {
+      return await requestJson(buildUrl('rpc/' + name), {
+        method: 'POST', body: JSON.stringify(params || {}),
+      });
+    } catch (error) {
+      if (error.code === 'PGRST202' || error.code === '42883') {
+        throw new Error('Atualização do banco pendente. Aplique o SQL reduce_egress_scoped_queries no Supabase.');
+      }
+      throw error;
+    }
+  }
 
   function startOfDay(date) {
     const value = new Date(date);
@@ -440,100 +481,147 @@
     return appointment;
   }
 
-  async function fetchAppointments() {
-    const data = await fetchAllRows('grooming_appointments', {
-      select: APPOINTMENT_SELECT,
-      order: 'appointment_date.asc,arrival_time.asc',
-    });
-    return (data || []).map(normalizeAppointment).sort(compareAppointments);
+  function rebuildAppointments() {
+    state.appointments = Object.entries(cache)
+      .filter(([key]) => key.startsWith('day:'))
+      .flatMap(([, entry]) => entry.value).sort(compareAppointments);
   }
 
-  async function fetchCustomers() {
-    const data = await fetchAllRows('customers', {
-      select: 'id,full_name,phone,notes,pets(id,name,breed,notes)',
-      order: 'full_name.asc',
-      'pets.order': 'name.asc',
-    });
-    return (data || []).map(normalizeCustomer).sort(compareCustomers);
+  async function loadAppointmentWindow(centerDateKey = toDateKey(new Date())) {
+    activeDate = centerDateKey;
+    const days = buildDayWindow(centerDateKey, 2).map((day) => day.dateKey);
+    const missing = days.filter((day) => !fresh('day:' + day) && !dayPending.has(day));
+    if (missing.length) {
+      const task = (async () => {
+        let version, rows;
+        do {
+          version = revision;
+          rows = await fetchAllRows('grooming_appointments', {
+            select: APPOINTMENT_SELECT,
+            appointment_date: `in.(${missing.join(',')})`,
+            order: 'appointment_date.asc,arrival_time.asc,id.asc',
+          });
+        } while (version !== revision);
+        const appointments = rows.map(normalizeAppointment);
+        missing.forEach((day) => putCache('day:' + day, appointments.filter((item) => item.date === day)));
+      })();
+      missing.forEach((day) => dayPending.set(day, task));
+      task.finally(() => missing.forEach((day) => dayPending.delete(day))).catch(() => {});
+    }
+    await Promise.all(days.map((day) => dayPending.get(day)));
+    rebuildAppointments();
+    state.appointmentsInitialized = true;
+    return getAppointmentsByDate(centerDateKey);
   }
 
   async function refreshAppointments() {
-    state.loadingAppointments = true;
-
-    try {
-      const appointments = await fetchAppointments();
-      const changed = !state.appointmentsInitialized || JSON.stringify(appointments) !== JSON.stringify(state.appointments);
-      state.appointments = appointments;
-      state.appointmentsInitialized = true;
-      state.lastError = null;
-      writeCache(CACHE_KEYS.appointments, appointments);
-      if (changed) {
-        emitAppointmentsChange({ source: 'refresh', total: appointments.length });
-      }
-      return clone(appointments);
-    } catch (error) {
-      state.lastError = error;
-      throw error;
-    } finally {
-      state.loadingAppointments = false;
-    }
+    return loadAppointmentWindow(activeDate || toDateKey(new Date()));
   }
 
-  async function refreshCustomers() {
-    state.loadingRegistry = true;
+  // Cada tela escolhe suas consultas; inicializar não baixa tabelas completas.
+  async function ready() { return { appointments: getAppointments(), customers: getCustomers() }; }
 
-    try {
-      const customers = await fetchCustomers();
-      const changed = !state.registryInitialized || JSON.stringify(customers) !== JSON.stringify(state.customers);
-      state.customers = customers;
-      state.registryInitialized = true;
-      state.lastError = null;
-      writeCache(CACHE_KEYS.customers, customers);
-      if (changed) {
-        emitRegistryChange({ source: 'refresh', total: customers.length });
-      }
-      return clone(customers);
-    } catch (error) {
-      state.lastError = error;
-      throw error;
-    } finally {
-      state.loadingRegistry = false;
-    }
+  function rememberCustomer(customer) {
+    state.customers = state.customers.filter((item) => item.id !== customer.id).concat(customer);
+    return clone(customer);
   }
 
-  async function ready() {
-    // Espera de rede só quando não há dado nenhum (primeiro acesso da sessão).
-    // Com cache hidratado, revalidamos em segundo plano: a tela já renderizou
-    // e os eventos de mudança atualizam o conteúdo quando o fresco chega.
-    const tasks = [];
-    const background = [];
-
-    if (!state.appointmentsInitialized) {
-      tasks.push(refreshAppointments());
-    } else {
-      background.push(refreshAppointments);
-    }
-
-    if (!state.registryInitialized) {
-      tasks.push(refreshCustomers());
-    } else {
-      background.push(refreshCustomers);
-    }
-
-    if (tasks.length) {
-      await Promise.all(tasks);
-    }
-
-    if (background.length) {
-      Promise.all(background.map((refresh) => refresh())).catch(() => {
-        // Mantemos os dados em cache; a revalidação tenta de novo na próxima troca.
+  async function loadCustomer(id, force = false) {
+    const key = 'customer:' + id;
+    if (force) delete cache[key];
+    const customer = await cached(key, async () => {
+      const row = await maybeSingle('customers', {
+        id: `eq.${id}`, select: 'id,full_name,phone,notes,pets(id,name,breed,notes)',
       });
-    }
+      if (!row) throw new Error('Cliente não encontrado. Atualize a busca.');
+      return normalizeCustomer(row);
+    });
+    return rememberCustomer(customer);
+  }
 
-    return {
-      appointments: clone(state.appointments),
-      customers: clone(state.customers),
-    };
+  async function searchCustomerPage(query = '', page = 0, pageSize = 25) {
+    const result = await cached('search:' + JSON.stringify([query.trim(), page, pageSize]), () =>
+      rpc('colina_search_customers', { p_query: query.trim(), p_offset: page * pageSize, p_limit: pageSize }));
+    return { ...result, rows: result.rows.map((row) => ({
+      id: row.id, fullName: row.full_name, phone: formatPhone(row.phone),
+      petNames: row.pet_names, petCount: row.pet_count,
+    })) };
+  }
+
+  async function loadRegistrySummary() {
+    state.registrySummary = await cached('registry-summary', () => rpc('colina_registry_summary'));
+    return clone(state.registrySummary);
+  }
+
+  async function loadReceptionInsights(month) {
+    const result = await cached('reception:' + month, () => rpc('colina_reception_insights', { p_month: month + '-01' }));
+    return result;
+  }
+
+  async function loadFrequency(options) {
+    const range = normalizeFrequencyRange(options);
+    const key = 'frequency:' + JSON.stringify(range);
+    const rows = await cached(key, () => rpc('colina_customer_frequency', {
+      p_start: range.startDate || null, p_end: range.endDate || null,
+    }));
+    return rows;
+  }
+
+  async function loadCustomerHistory(customerId, options, page = 0) {
+    const range = normalizeFrequencyRange(options);
+    const key = 'history:' + JSON.stringify([customerId, range, page]);
+    return cached(key, async () => {
+      const params = { select: APPOINTMENT_SELECT, customer_id: `eq.${customerId}`,
+        order: 'appointment_date.desc,arrival_time.desc,id.desc', offset: page * 50, limit: 51 };
+      const bounds = [];
+      if (range.startDate) bounds.push(`appointment_date.gte.${range.startDate}`);
+      if (range.endDate) bounds.push(`appointment_date.lte.${range.endDate}`);
+      if (bounds.length) params.and = `(${bounds.join(',')})`;
+      const rows = await requestJson(buildUrl('grooming_appointments', params), { method: 'GET' });
+      return { rows: rows.slice(0, 50).map(normalizeAppointment), hasMore: rows.length > 50 };
+    });
+  }
+
+  function forgetAppointment(id) {
+    Object.entries(cache).forEach(([key, entry]) => {
+      if (key.startsWith('day:')) entry.value = entry.value.filter((item) => item.id !== id);
+    });
+    rebuildAppointments();
+    persistCache();
+  }
+
+  async function reloadAppointment(id) {
+    invalidateReports();
+    const row = await maybeSingle('grooming_appointments', { select: APPOINTMENT_SELECT, id: `eq.${id}` });
+    forgetAppointment(id);
+    if (!row) throw new Error('Agendamento não encontrado. Atualize a agenda.');
+    const appointment = normalizeAppointment(row);
+    const entry = cache['day:' + appointment.date];
+    if (entry) entry.value.push(appointment);
+    rebuildAppointments();
+    persistCache();
+    emitAppointmentsChange({ source: 'mutation', id });
+    return appointment;
+  }
+
+  async function reloadCustomer(id) {
+    invalidateReports();
+    const customer = await loadCustomer(id, true);
+    // Atualiza os nomes já presentes na janela sem baixar novamente seus agendamentos.
+    Object.entries(cache).forEach(([key, entry]) => {
+      if (!key.startsWith('day:')) return;
+      entry.value.forEach((item) => {
+        if (item.customerId !== id) return;
+        item.clientName = customer.fullName;
+        item.phone = customer.phone;
+        const pet = customer.pets.find((pet) => pet.id === item.petId);
+        if (pet) { item.petName = pet.name; item.breed = pet.breed; }
+      });
+    });
+    rebuildAppointments();
+    persistCache();
+    emitRegistryChange({ source: 'mutation', id });
+    return customer;
   }
 
   function getAppointments() {
@@ -573,45 +661,7 @@
   }
 
   function getRegistrySummary() {
-    const customers = state.customers;
-    const totalPets = customers.reduce((total, customer) => total + customer.pets.length, 0);
-    const multiPetCustomers = customers.filter((customer) => customer.pets.length > 1).length;
-
-    return {
-      totalCustomers: customers.length,
-      totalPets,
-      multiPetCustomers,
-    };
-  }
-
-  function searchCustomers(query, limit) {
-    const normalizedQuery = normalizeText(query).toLowerCase();
-    const numericQuery = phoneDigits(query);
-
-    let results = state.customers.filter((customer) => {
-      if (!normalizedQuery && !numericQuery) {
-        return true;
-      }
-
-      const textStack = [
-        customer.fullName,
-        customer.phone,
-        customer.notes,
-        customer.pets.map((pet) => `${pet.name} ${pet.breed} ${pet.notes}`).join(' '),
-      ]
-        .join(' ')
-        .toLowerCase();
-
-      const phoneStack = phoneDigits(customer.phone);
-
-      return textStack.includes(normalizedQuery) || (numericQuery ? phoneStack.includes(numericQuery) : false);
-    });
-
-    if (typeof limit === 'number') {
-      results = results.slice(0, limit);
-    }
-
-    return clone(results);
+    return state.registrySummary || { totalCustomers: 0, totalPets: 0, multiPetCustomers: 0 };
   }
 
   function getAppointmentsByDate(dateKey) {
@@ -665,39 +715,15 @@
     };
   }
 
-  function getMonthlyGroomingCounts(currentMonthKey) {
-    const counts = { higienica: 0, tesoura: 0, maquina: 0 };
-    getAppointments().forEach((appointment) => {
-      if (monthKey(appointment.date) === currentMonthKey && appointment.groomingType) {
-        counts[appointment.groomingType] += 1;
-      }
-    });
-    return counts;
+  function getMonthlyGroomingCounts(month) {
+    const entry = cache['reception:' + month];
+    return entry ? entry.value.monthly : { higienica: 0, tesoura: 0, maquina: 0 };
   }
 
   function getFrequentPets(limit) {
-    const map = new Map();
-
-    getAppointments().forEach((appointment) => {
-      const key = `${appointment.petName.toLowerCase()}::${appointment.clientName.toLowerCase()}`;
-      const entry = map.get(key) || {
-        petName: appointment.petName,
-        clientName: appointment.clientName,
-        breed: appointment.breed,
-        visits: 0,
-      };
-
-      entry.visits += 1;
-      map.set(key, entry);
-    });
-
-    return Array.from(map.values())
-      .sort((left, right) => right.visits - left.visits || left.petName.localeCompare(right.petName))
-      .slice(0, limit || 5)
-      .map((item, index) => ({
-        ...item,
-        emoji: PET_EMOJIS[index % PET_EMOJIS.length],
-      }));
+    const entry = cache['reception:' + monthKey(activeDate || toDateKey(new Date()))];
+    return (entry ? entry.value.frequent : []).slice(0, limit || 5)
+      .map((item, index) => ({ ...item, emoji: PET_EMOJIS[index % PET_EMOJIS.length] }));
   }
 
   function normalizeFrequencyRange(options) {
@@ -706,130 +732,6 @@
       startDate: source.startDate || source.start || '',
       endDate: source.endDate || source.end || '',
     };
-  }
-
-  function appointmentMatchesFrequencyRange(appointment, options) {
-    const range = normalizeFrequencyRange(options);
-
-    if (range.startDate && appointment.date < range.startDate) {
-      return false;
-    }
-
-    if (range.endDate && appointment.date > range.endDate) {
-      return false;
-    }
-
-    return true;
-  }
-
-  function getCustomerFrequencyRows(options) {
-    const customerById = new Map(state.customers.map((customer) => [customer.id, customer]));
-    const byCustomer = new Map();
-
-    state.appointments.forEach((appointment) => {
-      if (!appointment.customerId || !appointmentMatchesFrequencyRange(appointment, options)) {
-        return;
-      }
-
-      const customer = customerById.get(appointment.customerId);
-      const entry = byCustomer.get(appointment.customerId) || {
-        customerId: appointment.customerId,
-        fullName: appointment.clientName || (customer ? customer.fullName : ''),
-        phone: appointment.phone || (customer ? customer.phone : ''),
-        petNames: customer ? customer.pets.map((pet) => pet.name) : [],
-        totalAppointments: 0,
-        bathCount: 0,
-        higienicaCount: 0,
-        tesouraCount: 0,
-        maquinaCount: 0,
-        groomingCount: 0,
-        firstAppointmentDate: '',
-        firstAppointmentTime: '',
-        lastAppointmentDate: '',
-        lastAppointmentTime: '',
-        lastPetName: '',
-      };
-
-      entry.totalAppointments += 1;
-
-      if (appointment.bath) {
-        entry.bathCount += 1;
-      }
-
-      if (appointment.groomingType === 'higienica') {
-        entry.higienicaCount += 1;
-      } else if (appointment.groomingType === 'tesoura') {
-        entry.tesouraCount += 1;
-      } else if (appointment.groomingType === 'maquina') {
-        entry.maquinaCount += 1;
-      }
-
-      entry.groomingCount = entry.higienicaCount + entry.tesouraCount + entry.maquinaCount;
-
-      if (
-        !entry.firstAppointmentDate ||
-        compareAppointmentMoments(appointment.date, appointment.arrivalTime, entry.firstAppointmentDate, entry.firstAppointmentTime) < 0
-      ) {
-        entry.firstAppointmentDate = appointment.date;
-        entry.firstAppointmentTime = appointment.arrivalTime;
-      }
-
-      if (
-        !entry.lastAppointmentDate ||
-        compareAppointmentMoments(appointment.date, appointment.arrivalTime, entry.lastAppointmentDate, entry.lastAppointmentTime) > 0
-      ) {
-        entry.lastAppointmentDate = appointment.date;
-        entry.lastAppointmentTime = appointment.arrivalTime;
-        entry.lastPetName = appointment.petName;
-      }
-
-      byCustomer.set(appointment.customerId, entry);
-    });
-
-    return Array.from(byCustomer.values())
-      .map((entry) => ({
-        ...entry,
-        petNames: entry.petNames.join(' · '),
-      }))
-      .sort((left, right) => {
-        return (
-          right.totalAppointments - left.totalAppointments ||
-          compareAppointmentMoments(right.lastAppointmentDate, right.lastAppointmentTime, left.lastAppointmentDate, left.lastAppointmentTime) ||
-          left.fullName.localeCompare(right.fullName)
-        );
-      });
-  }
-
-  function getCustomerFrequencySummary(options) {
-    return getCustomerFrequencyRows(options).reduce(
-      (summary, row) => {
-        summary.totalCustomers += 1;
-        summary.totalAppointments += row.totalAppointments;
-        summary.bathCount += row.bathCount;
-        summary.higienicaCount += row.higienicaCount;
-        summary.tesouraCount += row.tesouraCount;
-        summary.maquinaCount += row.maquinaCount;
-        return summary;
-      },
-      {
-        totalCustomers: 0,
-        totalAppointments: 0,
-        bathCount: 0,
-        higienicaCount: 0,
-        tesouraCount: 0,
-        maquinaCount: 0,
-      }
-    );
-  }
-
-  function getCustomerFrequencyHistory(customerId, options) {
-    const normalizedCustomerId = normalizeText(customerId);
-
-    return clone(
-      state.appointments
-        .filter((appointment) => appointment.customerId === normalizedCustomerId && appointmentMatchesFrequencyRange(appointment, options))
-        .sort((left, right) => compareAppointmentMoments(right.date, right.arrivalTime, left.date, left.arrivalTime))
-    );
   }
 
   function hasConflict(nextAppointment) {
@@ -966,8 +868,7 @@
   }
 
   async function ensureCustomerSelection(customerId) {
-    await ready();
-    const customer = getCustomerRecordById(customerId);
+    const customer = await loadCustomer(customerId);
 
     if (!customer) {
       throw new Error('Selecione um cliente cadastrado antes de continuar.');
@@ -1107,7 +1008,7 @@
       }
     }
 
-    await refreshCustomers();
+    await reloadCustomer(customer.id);
 
     const affectedPets = petResults
       .map((result) => clone(getPetRecordById(customer.id, result.pet.id)))
@@ -1217,7 +1118,7 @@
       }
     }
 
-    await refreshCustomers();
+    await reloadCustomer(customer.id);
 
     return {
       customer: clone(getCustomerRecordById(customer.id)),
@@ -1245,11 +1146,14 @@
       throw new Error('A exclusão foi bloqueada pelo Supabase. Verifique as permissões de DELETE na tabela customers e tente novamente.');
     }
 
-    await refreshCustomers();
+    invalidateReports();
+    delete cache['customer:' + customerId];
+    state.customers = state.customers.filter((item) => item.id !== customerId);
+    persistCache();
+    emitRegistryChange({ source: 'mutation', id: customerId });
   }
 
   async function addAppointment(input) {
-    await ready();
 
     if (hasConflict(input)) {
       throw new Error('Já existe um agendamento para este pet no mesmo dia e horário.');
@@ -1286,12 +1190,10 @@
       },
     ]);
 
-    await Promise.all([refreshAppointments(), refreshCustomers()]);
-    return state.appointments.find((appointment) => appointment.id === created[0].id);
+    return reloadAppointment(created[0].id);
   }
 
   async function updateAppointment(input) {
-    await ready();
 
     const appointmentId = normalizeText(input.id);
     if (!appointmentId) {
@@ -1326,12 +1228,10 @@
       throw new Error('N\u00e3o foi poss\u00edvel encontrar o agendamento para atualizar.');
     }
 
-    await refreshAppointments();
-    return state.appointments.find((appointment) => appointment.id === updated[0].id) || null;
+    return reloadAppointment(updated[0].id);
   }
 
   async function deleteAppointment(appointmentId) {
-    await ready();
 
     const id = normalizeText(appointmentId);
     if (!id) {
@@ -1357,12 +1257,13 @@
       throw new Error('A exclusão foi bloqueada no Supabase. Aplique a migration de DELETE da agenda e tente novamente.');
     }
 
-    await refreshAppointments();
+    invalidateReports();
+    forgetAppointment(id);
+    emitAppointmentsChange({ source: 'mutation', id });
     return normalizeAppointment(existing);
   }
 
   async function updateAppointmentAttendance(appointmentId, values) {
-    await ready();
 
     const id = normalizeText(appointmentId);
     if (!id) {
@@ -1384,8 +1285,7 @@
       throw new Error('Não foi possível atualizar o status de chegada/saída.');
     }
 
-    await refreshAppointments();
-    return state.appointments.find((item) => item.id === id) || null;
+    return reloadAppointment(id);
   }
 
   async function markAppointmentArrival(appointmentId) {
@@ -1496,22 +1396,26 @@
   window.ColinaAgenda = {
     ready,
     refreshAppointments,
-    refreshCustomers,
+    loadAppointmentWindow,
+    loadCustomer,
+    searchCustomerPage,
+    loadRegistrySummary,
+    loadReceptionInsights,
+    loadFrequency,
+    loadCustomerHistory,
+    debounce,
+    startVisibleSync,
     getAppointments,
     getAppointmentById,
     getCustomers,
     getCustomerById,
     getPetsByCustomerId,
     getRegistrySummary,
-    searchCustomers,
     getAppointmentsByDate,
     getAppointmentsByDateAndShift,
     getDaySummary,
     getMonthlyGroomingCounts,
     getFrequentPets,
-    getCustomerFrequencyRows,
-    getCustomerFrequencySummary,
-    getCustomerFrequencyHistory,
     getAttendanceState,
     getAttendanceLabel,
     getAttendanceSummaryLabel,
@@ -1547,7 +1451,7 @@
     phoneDigits,
     escapeHtml,
     isLoading: function () {
-      return state.loadingAppointments || state.loadingRegistry;
+      return pending.size > 0 || dayPending.size > 0;
     },
     getLastError: function () {
       return state.lastError;
