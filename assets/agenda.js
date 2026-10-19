@@ -1,6 +1,33 @@
 (function () {
   const api = window.ColinaAgenda;
   const e = api.escapeHtml;
+  let lookupRows = [];
+  let lookupLoading = false;
+  let lookupError = '';
+  let lookupVersion = 0;
+  let selectionVersion = 0;
+  let windowVersion = 0;
+
+  async function searchLookup() {
+    const query = qs('editCustomerLookup').value.trim();
+    const version = ++lookupVersion;
+    lookupRows = [];
+    lookupError = '';
+    lookupLoading = Boolean(query);
+    renderEditLookupResults();
+    if (!query) return;
+    try {
+      const result = await api.searchCustomerPage(query, 0, 5);
+      if (version !== lookupVersion || qs('editCustomerLookup').value.trim() !== query) return;
+      lookupRows = result.rows;
+    } catch (error) {
+      if (version === lookupVersion) lookupError = error.message;
+    } finally {
+      if (version === lookupVersion) { lookupLoading = false; renderEditLookupResults(); }
+    }
+  }
+  const scheduleLookup = api.debounce(searchLookup);
+
   const todayKey = api.toDateKey(new Date());
   const currentMinutes = new Date().getHours() * 60 + new Date().getMinutes();
   let selectedDateKey = todayKey;
@@ -83,7 +110,7 @@
       `;
       button.addEventListener('click', function () {
         selectedDateKey = day.dateKey;
-        render();
+        syncData();
       });
       container.appendChild(button);
     });
@@ -256,10 +283,14 @@
   }
 
   async function syncData() {
+    const version = ++windowVersion;
+    const date = selectedDateKey;
+    setTableMessage('Carregando agenda...');
     try {
-      await Promise.all([api.refreshAppointments(), api.refreshCustomers()]);
+      await api.loadAppointmentWindow(date);
+      if (version === windowVersion) render();
     } catch (error) {
-      renderError(error);
+      if (version === windowVersion) renderError(error);
     }
   }
 
@@ -351,13 +382,20 @@
   }
 
   function clearEditSelection() {
+    ++selectionVersion;
     editingCustomerId = '';
     editingPetId = '';
     editPetPickerOpen = false;
   }
 
-  function selectEditCustomer(customerId) {
-    const customer = api.getCustomerById(customerId);
+  async function selectEditCustomer(customerId) {
+    const version = ++selectionVersion;
+    let customer;
+    try { customer = await api.loadCustomer(customerId); }
+    catch (error) { window.alert(error.message); return; }
+    if (version !== selectionVersion) return;
+    ++lookupVersion;
+    lookupLoading = false;
 
     if (!customer) {
       clearEditSelection();
@@ -378,13 +416,13 @@
     const query = qs('editCustomerLookup').value.trim();
     const customer = getEditingCustomer();
     const shouldHideResults = customer && query === buildLookupLabel(customer);
-    const results = query && !shouldHideResults ? api.searchCustomers(query, 5) : [];
+    const results = query && !shouldHideResults ? lookupRows : [];
     const shouldShowEmpty = Boolean(query) && !shouldHideResults;
 
     qs('editLookupResults').innerHTML = results.length
       ? results
           .map((item) => {
-            const petsLabel = item.pets.length ? item.pets.map((pet) => e(pet.name)).join(' · ') : 'Sem pets cadastrados';
+            const petsLabel = e(item.petNames || 'Sem pets cadastrados');
             return `
               <button type="button" class="search-result-option${item.id === editingCustomerId ? ' is-active' : ''}" data-customer-id="${item.id}">
                 <strong>${e(item.fullName)}</strong>
@@ -395,7 +433,7 @@
           })
           .join('')
       : shouldShowEmpty
-        ? '<div class="search-result-empty">Nenhum cadastro encontrado.</div>'
+        ? `<div class="search-result-empty">${lookupLoading ? 'Buscando...' : lookupError ? e(lookupError) : 'Nenhum cadastro encontrado.'}</div>`
         : '';
   }
 
@@ -483,12 +521,16 @@
     renderEditPetPicker();
   }
 
-  function openEditModal(appointmentId) {
+  async function openEditModal(appointmentId) {
     const appointment = api.getAppointmentById(appointmentId);
     if (!appointment) {
       return;
     }
 
+    const version = ++selectionVersion;
+    try { await api.loadCustomer(appointment.customerId); }
+    catch (error) { window.alert(error.message); return; }
+    if (version !== selectionVersion) return;
     actionsAppointmentId = '';
     editingAppointmentId = appointment.id;
     editingCustomerId = appointment.customerId;
@@ -604,6 +646,7 @@
       }
 
       selectedDateKey = saved.date;
+      await syncData();
       selectedShift = api.getShiftForTime(saved.arrivalTime);
       closeEditModal();
       render();
@@ -672,14 +715,14 @@
       const date = api.fromDateKey(selectedDateKey);
       date.setDate(date.getDate() - 1);
       selectedDateKey = api.toDateKey(date);
-      render();
+      syncData();
     });
 
     qs('nextDay').addEventListener('click', function () {
       const date = api.fromDateKey(selectedDateKey);
       date.setDate(date.getDate() + 1);
       selectedDateKey = api.toDateKey(date);
-      render();
+      syncData();
     });
 
     qs('turnoManha').addEventListener('click', function () {
@@ -742,6 +785,11 @@
     });
 
     qs('editCustomerLookup').addEventListener('input', function () {
+      ++lookupVersion;
+      lookupRows = [];
+      lookupLoading = Boolean(qs('editCustomerLookup').value.trim());
+      lookupError = '';
+      scheduleLookup();
       clearEditFeedback();
       clearEditSelection();
       renderEditSelectionLine();
@@ -857,14 +905,13 @@
     setTableMessage('Carregando agenda...');
 
     try {
-      await api.ready();
-      render();
+      await syncData();
     } catch (error) {
       renderError(error);
     }
 
     window.setInterval(updateClock, 30000);
-    window.setInterval(syncData, 30000);
+    api.startVisibleSync(syncData);
   }
 
   init();
