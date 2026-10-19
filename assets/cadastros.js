@@ -3,6 +3,13 @@
   const e = api.escapeHtml;
 
   let searchTerm = '';
+  let page = 0;
+  let pageRows = [];
+  let totalRows = 0;
+  let listVersion = 0;
+  let selectionVersion = 0;
+  let listLoading = false;
+  const scheduleSearch = api.debounce(() => syncData());
   let selectedCustomerId = '';
   let submitting = false;
   let deleting = false;
@@ -53,13 +60,11 @@
   }
 
   function getFilteredCustomers() {
-    return searchTerm.trim() ? api.searchCustomers(searchTerm) : api.getCustomers();
+    return pageRows;
   }
 
   function renderCustomerCard(customer) {
-    const petsLine = customer.pets.length
-      ? customer.pets.map((pet) => e(pet.name)).join(' · ')
-      : 'Sem pets';
+    const petsLine = e(customer.petNames || 'Sem pets');
 
     return `
       <button type="button" class="registry-card${customer.id === selectedCustomerId ? ' is-active' : ''}" data-customer-id="${customer.id}">
@@ -68,7 +73,7 @@
             <div class="registry-card-title">${e(customer.fullName)}</div>
             <div class="registry-card-subtitle">${e(customer.phone)}</div>
           </div>
-          <div class="registry-card-count">${customer.pets.length} pet${customer.pets.length === 1 ? '' : 's'}</div>
+          <div class="registry-card-count">${customer.petCount} pet${customer.petCount === 1 ? '' : 's'}</div>
         </div>
         <div class="registry-card-pets">${petsLine}</div>
       </button>
@@ -80,6 +85,12 @@
     qs('registryList').innerHTML = customers.length
       ? customers.map(renderCustomerCard).join('')
       : '<div class="empty-card">Nenhum cadastro encontrado.</div>';
+    qs('registryList').insertAdjacentHTML('beforeend', `
+      <div class="registry-pagination submit-row">
+        <button type="button" class="text-link button-link" data-page="prev" ${page === 0 || listLoading ? 'disabled' : ''}>Anterior</button>
+        <span>Página ${page + 1} · ${totalRows} clientes encontrados</span>
+        <button type="button" class="text-link button-link" data-page="next" ${(page + 1) * 25 >= totalRows || listLoading ? 'disabled' : ''}>Próxima</button>
+      </div>`);
   }
 
   function renderPetRowsHtml() {
@@ -188,8 +199,12 @@
     });
   }
 
-  function selectCustomer(customerId) {
-    const customer = api.getCustomerById(customerId);
+  async function selectCustomer(customerId) {
+    const version = ++selectionVersion;
+    let customer;
+    try { customer = await api.loadCustomer(customerId); }
+    catch (error) { window.alert(error.message); return; }
+    if (version !== selectionVersion) return;
     if (!customer) {
       startNewCustomer();
       return;
@@ -207,6 +222,7 @@
   }
 
   function startNewCustomer() {
+    ++selectionVersion;
     selectedCustomerId = '';
     draft = { fullName: '', phone: '' };
     petRows = [newRow()];
@@ -236,6 +252,7 @@
   }
 
   function closeModal() {
+    ++selectionVersion;
     qs('modalOverlay').classList.remove('is-open');
     selectedCustomerId = '';
     submitting = false;
@@ -368,15 +385,25 @@
   }
 
   function renderError(error) {
-    qs('registryList').innerHTML = '<div class="empty-card">Não foi possível carregar os cadastros do Supabase.</div>';
+    qs('registryList').innerHTML = `<div class="empty-card">Não foi possível carregar os cadastros. ${e(error && error.message)}</div>`;
     showFeedback(error && error.message ? error.message : 'Falha ao carregar dados do Supabase.', 'error');
   }
 
   async function syncData() {
+    const version = ++listVersion;
+    listLoading = true;
+    qs('registryList').textContent = 'Carregando cadastros...';
     try {
-      await api.refreshCustomers();
+      const [result] = await Promise.all([api.searchCustomerPage(searchTerm, page), api.loadRegistrySummary()]);
+      if (version !== listVersion) return;
+      if (!result.rows.length && page > 0) { page -= 1; return syncData(); }
+      pageRows = result.rows;
+      totalRows = result.total;
+      listLoading = false;
+      renderSummary();
+      renderRegistryList();
     } catch (error) {
-      renderError(error);
+      if (version === listVersion) { listLoading = false; renderError(error); }
     }
   }
 
@@ -385,10 +412,19 @@
 
     qs('registrySearch').addEventListener('input', function () {
       searchTerm = qs('registrySearch').value;
-      renderRegistryList();
+      page = 0;
+      ++listVersion;
+      qs('registryList').textContent = 'Buscando...';
+      scheduleSearch();
     });
 
     qs('registryList').addEventListener('click', function (event) {
+      const navigation = event.target.closest('[data-page]');
+      if (navigation && !listLoading) {
+        page += navigation.dataset.page === 'next' ? 1 : -1;
+        syncData();
+        return;
+      }
       const button = event.target.closest('[data-customer-id]');
       if (!button) return;
       selectCustomer(button.getAttribute('data-customer-id'));
@@ -466,13 +502,8 @@
       }
     });
 
-    window.addEventListener('colina:registry-changed', function () {
-      if (selectedCustomerId && !api.getCustomerById(selectedCustomerId)) {
-        startNewCustomer();
-      }
-      renderSummary();
-      renderRegistryList();
-    });
+    window.addEventListener('colina:registry-changed', syncData);
+
   }
 
   async function init() {
@@ -480,14 +511,13 @@
     bind();
 
     try {
-      await api.ready();
-      render();
+      await syncData();
     } catch (error) {
       renderError(error);
     }
 
     window.setInterval(updateClock, 30000);
-    window.setInterval(syncData, 30000);
+    api.startVisibleSync(syncData);
   }
 
   init();
