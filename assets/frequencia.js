@@ -5,10 +5,18 @@
   let searchTerm = '';
   let sortField = 'appointments';
   let sortDirection = 'desc';
-  let periodMode = 'all';
+  let periodMode = '30';
   let customStartDate = '';
   let customEndDate = '';
   let activeCustomerId = '';
+  let frequencyRows = [];
+  let frequencyVersion = 0;
+  let historyRows = [];
+  let historyPage = 0;
+  let historyHasMore = false;
+  let historyLoading = false;
+  let historyError = '';
+  let historyVersion = 0;
 
   const SORT_FIELD_LABELS = {
     appointments: 'agendamentos',
@@ -195,15 +203,19 @@
   }
 
   function getRows() {
-    return sortRows(api.getCustomerFrequencyRows(getPeriodRange()).filter(matchesSearch));
+    return sortRows(frequencyRows.slice().filter(matchesSearch));
   }
 
   function getAllRowsForPeriod() {
-    return api.getCustomerFrequencyRows(getPeriodRange());
+    return frequencyRows.slice();
   }
 
   function renderSummary() {
-    const summary = api.getCustomerFrequencySummary(getPeriodRange());
+    const summary = frequencyRows.reduce((totals, row) => {
+      totals.totalCustomers += 1;
+      ['totalAppointments', 'bathCount', 'higienicaCount', 'tesouraCount', 'maquinaCount'].forEach((key) => totals[key] += row[key]);
+      return totals;
+    }, { totalCustomers: 0, totalAppointments: 0, bathCount: 0, higienicaCount: 0, tesouraCount: 0, maquinaCount: 0 });
     qs('activitySummary').innerHTML = `
       <div class="metric-chip metric-chip--neutral">
         <span class="metric-chip-value">${summary.totalCustomers}</span>
@@ -336,7 +348,7 @@
   function renderCustomerDetail() {
     const customer = api.getCustomerById(activeCustomerId);
     const row = getAllRowsForPeriod().find((item) => item.customerId === activeCustomerId);
-    const history = api.getCustomerFrequencyHistory(activeCustomerId, getFullHistoryRange());
+    const history = historyRows;
     const customerName = row ? row.fullName : customer ? customer.fullName : 'Cliente';
     const customerPhone = row ? row.phone : customer ? customer.phone : '';
     const petNames = row ? row.petNames : customer && customer.pets.length ? customer.pets.map((pet) => pet.name).join(' · ') : '';
@@ -379,7 +391,9 @@
         <span>Histórico completo até ${e(api.formatShortDate(api.toDateKey(new Date())))}</span>
       </div>
 
-      ${renderCustomerHistory(history)}
+      ${historyError ? `<div class="empty-card">${e(historyError)} <button type="button" class="text-link button-link" id="retryHistory">Tentar novamente</button></div>` : ''}
+      ${historyLoading && !history.length ? '<div class="empty-card">Carregando histórico...</div>' : renderCustomerHistory(history)}
+      ${historyHasMore ? `<button type="button" class="text-link button-link" id="moreHistory" ${historyLoading ? 'disabled' : ''}>${historyLoading ? 'Carregando...' : 'Carregar mais 50'}</button>` : ''}
     `;
   }
 
@@ -439,12 +453,50 @@
     qs('activityList').innerHTML = `<div class="empty-card">${e(error && error.message ? error.message : 'Não foi possível carregar os dados do Supabase.')}</div>`;
   }
 
-  async function syncData() {
+  async function loadHistory(append = false) {
+    const customerId = activeCustomerId;
+    if (!customerId) return;
+    const version = ++historyVersion;
+    const nextPage = append ? historyPage + 1 : 0;
+    historyLoading = true;
+    historyError = '';
+    if (!append) { historyRows = []; historyHasMore = false; }
+    renderCustomerDetail();
     try {
-      await Promise.all([api.refreshAppointments(), api.refreshCustomers()]);
+      const result = await api.loadCustomerHistory(customerId, getFullHistoryRange(), nextPage);
+      if (version !== historyVersion || customerId !== activeCustomerId) return;
+      historyRows = append ? historyRows.concat(result.rows) : result.rows;
+      historyPage = nextPage;
+      historyHasMore = result.hasMore;
     } catch (error) {
-      renderError(error);
+      if (version === historyVersion) historyError = error.message;
+    } finally {
+      if (version === historyVersion && customerId === activeCustomerId) {
+        historyLoading = false;
+        renderCustomerDetail();
+      }
     }
+  }
+
+  async function syncData() {
+    const version = ++frequencyVersion;
+    qs('activityList').textContent = 'Carregando resumo do período...';
+    try {
+      const rows = await api.loadFrequency(getPeriodRange());
+      if (version !== frequencyVersion) return;
+      frequencyRows = rows;
+      render();
+    } catch (error) {
+      if (version === frequencyVersion) renderError(error);
+    }
+  }
+
+  function changePeriod() {
+    frequencyRows = [];
+    activeCustomerId = '';
+    ++historyVersion;
+    render();
+    syncData();
   }
 
   function bind() {
@@ -466,20 +518,20 @@
     document.querySelectorAll('[data-period]').forEach((button) => {
       button.addEventListener('click', function () {
         periodMode = button.dataset.period;
-        render();
+        changePeriod();
       });
     });
 
     qs('periodStart').addEventListener('change', function () {
       customStartDate = qs('periodStart').value;
       periodMode = 'custom';
-      render();
+      changePeriod();
     });
 
     qs('periodEnd').addEventListener('change', function () {
       customEndDate = qs('periodEnd').value;
       periodMode = 'custom';
-      render();
+      changePeriod();
     });
 
     qs('activityList').addEventListener('click', function (event) {
@@ -489,12 +541,20 @@
       }
 
       activeCustomerId = button.dataset.customerId;
+      historyRows = [];
+      historyHasMore = false;
+      historyLoading = true;
+      historyError = '';
       render();
+      loadHistory();
     });
 
     qs('customerDetailPanel').addEventListener('click', function (event) {
+      if (event.target.closest('#moreHistory') && !historyLoading) { loadHistory(true); return; }
+      if (event.target.closest('#retryHistory') && !historyLoading) { loadHistory(); return; }
       if (event.target.closest('#closeCustomerDrawer') || event.target === qs('customerDetailPanel')) {
         activeCustomerId = '';
+        ++historyVersion;
         render();
       }
     });
@@ -502,6 +562,7 @@
     window.addEventListener('keydown', function (event) {
       if (event.key === 'Escape' && activeCustomerId) {
         activeCustomerId = '';
+        ++historyVersion;
         render();
       }
     });
@@ -522,14 +583,13 @@
     renderToolbarMeta(0);
 
     try {
-      await api.ready();
-      render();
+      await syncData();
     } catch (error) {
       renderError(error);
     }
 
     window.setInterval(updateClock, 30000);
-    window.setInterval(syncData, 30000);
+    api.startVisibleSync(syncData);
   }
 
   init();
